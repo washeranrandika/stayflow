@@ -72,6 +72,8 @@ async def list_guests(
                 Guest.full_name.ilike(q),
                 Guest.phone.ilike(q),
                 Guest.email.ilike(q),
+                Guest.notes.ilike(q),
+                Guest.address.ilike(q),
             )
         )
 

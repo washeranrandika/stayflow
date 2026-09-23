@@ -57,14 +57,9 @@ export default function DashboardScreen() {
   const occupancyPercent = totalRooms > 0 ? Math.round((occupiedCount / totalRooms) * 100) : 0;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-    >
-      {/* ── Brand Header with Logo ────────────────────────────────────────── */}
-      <View style={[styles.brandHeader, { paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 12 : 8) }]}>
+    <View style={styles.container}>
+      {/* ── Fixed Brand Header with Logo & Safe Area Inset ───────────────── */}
+      <View style={[styles.fixedHeader, { paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 12 : 8) }]}>
         <View style={styles.logoRow}>
           <Image
             source={require("../../assets/icon.jpg")}
@@ -92,21 +87,28 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* ── Welcome Greeting ──────────────────────────────────────────────── */}
-      <View style={styles.welcomeBanner}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greetingText}>
-            Good {getTimeOfDay()}, {user?.full_name?.split(" ")[0] || "Staff"} 👋
-          </Text>
-          <Text style={styles.dateText}>
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
-          </Text>
+      {/* ── Scrollable Dashboard Content ─────────────────────────────────── */}
+      <ScrollView
+        style={styles.scrollBody}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+      >
+        {/* ── Welcome Greeting ──────────────────────────────────────────────── */}
+        <View style={styles.welcomeBanner}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.greetingText}>
+              Good {getTimeOfDay()}, {user?.full_name?.split(" ")[0] || "Staff"} 👋
+            </Text>
+            <Text style={styles.dateText}>
+              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+            </Text>
+          </View>
+          <View style={styles.liveIndicator}>
+            <View style={styles.greenDot} />
+            <Text style={styles.liveText}>Live Sync</Text>
+          </View>
         </View>
-        <View style={styles.liveIndicator}>
-          <View style={styles.greenDot} />
-          <Text style={styles.liveText}>Live Sync</Text>
-        </View>
-      </View>
 
       {/* Error Banner */}
       {isError && (
@@ -282,6 +284,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </View>
   );
 }
 
@@ -289,10 +292,25 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 40 },
 
-  // Brand Header
-  brandHeader: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    marginBottom: 16, paddingTop: Platform.OS === "ios" ? 10 : 4,
+  // Fixed Brand Header
+  fixedHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
+    zIndex: 10,
+  },
+  scrollBody: {
+    flex: 1,
   },
   logoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   logoImage: {

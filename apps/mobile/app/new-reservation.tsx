@@ -20,8 +20,9 @@ import { useAuthStore } from "@/store/auth";
 import {
   Calendar as CalendarIcon, User, BedDouble, Plus, Search,
   ChevronRight, ChevronLeft, ArrowLeft, DollarSign, Clock, Tag,
-  Users, CheckCircle2, AlertCircle, X, Sparkles, Check, Layers
+  Users, CheckCircle2, AlertCircle, X, Sparkles, Check, Layers, CreditCard
 } from "lucide-react-native";
+import { validateGuestId } from "@/lib/idValidation";
 
 const SOURCES = [
   { key: "PHONE", label: "📞 Phone" },
@@ -125,6 +126,8 @@ export default function NewReservationScreen() {
   const [newGuestName, setNewGuestName] = useState("");
   const [newGuestPhone, setNewGuestPhone] = useState("");
   const [newGuestEmail, setNewGuestEmail] = useState("");
+  const [newGuestIdNumber, setNewGuestIdNumber] = useState("");
+  const [newGuestIdType, setNewGuestIdType] = useState("NATIONAL_ID");
 
   // ── Data Fetching ─────────────────────────────────────────────────────────────
   const { data: propsData } = useQuery({
@@ -772,6 +775,68 @@ export default function NewReservationScreen() {
                     value={newGuestEmail}
                     onChangeText={setNewGuestEmail}
                   />
+
+                  {/* ID Document & Live Verification */}
+                  <View style={{ marginTop: 8 }}>
+                    <View style={{ flexDirection: "row", gap: 6, marginBottom: 6 }}>
+                      {["NATIONAL_ID", "PASSPORT", "DRIVING_LICENSE"].map((t) => (
+                        <TouchableOpacity
+                          key={t}
+                          style={[
+                            styles.idTypeChip,
+                            newGuestIdType === t && styles.idTypeChipActive
+                          ]}
+                          onPress={() => setNewGuestIdType(t)}
+                        >
+                          <Text style={[
+                            styles.idTypeChipText,
+                            newGuestIdType === t && styles.idTypeChipTextActive
+                          ]}>
+                            {t === "NATIONAL_ID" ? "NIC" : t === "PASSPORT" ? "Passport" : "License"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <TextInput
+                      style={[
+                        styles.input,
+                        newGuestIdNumber.trim()
+                          ? (validateGuestId(newGuestIdType, newGuestIdNumber).isValid
+                              ? { borderColor: "#86efac", backgroundColor: "#f0fdf4" }
+                              : { borderColor: "#fca5a5", backgroundColor: "#fef2f2" })
+                          : undefined
+                      ]}
+                      placeholder={newGuestIdType === "NATIONAL_ID" ? "ID Number (e.g. 981234567V)" : "Document Number"}
+                      value={newGuestIdNumber}
+                      onChangeText={setNewGuestIdNumber}
+                      autoCapitalize="characters"
+                    />
+
+                    {/* Decoded Info */}
+                    {newGuestIdNumber.trim() !== "" && (() => {
+                      const v = validateGuestId(newGuestIdType, newGuestIdNumber);
+                      if (v.isValid && v.dobFormatted) {
+                        return (
+                          <View style={styles.quickIdBadge}>
+                            <Sparkles size={13} color="#15803d" />
+                            <Text style={styles.quickIdBadgeText}>
+                              🎂 {v.dobFormatted} • {v.gender} • {v.age} yrs
+                            </Text>
+                          </View>
+                        );
+                      }
+                      if (!v.isValid && v.errorMessage) {
+                        return (
+                          <Text style={styles.quickIdErrorText}>
+                            ⚠️ {v.errorMessage}
+                          </Text>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </View>
+
                   <TouchableOpacity
                     style={styles.saveGuestBtn}
                     onPress={() => {
@@ -779,11 +844,28 @@ export default function NewReservationScreen() {
                         Alert.alert("Required", "Please provide guest full name.");
                         return;
                       }
-                      quickGuestMutation.mutate({
+
+                      const v = newGuestIdNumber.trim()
+                        ? validateGuestId(newGuestIdType, newGuestIdNumber)
+                        : null;
+
+                      if (v && !v.isValid) {
+                        Alert.alert("Invalid ID", v.errorMessage || "Please enter a valid ID number.");
+                        return;
+                      }
+
+                      const payload: any = {
                         full_name: newGuestName.trim(),
                         phone: newGuestPhone.trim() || undefined,
                         email: newGuestEmail.trim() || undefined,
-                      });
+                        date_of_birth: v?.dob || undefined,
+                      };
+
+                      if (newGuestIdNumber.trim()) {
+                        payload.notes = `[ID: ${newGuestIdType} - ${newGuestIdNumber.trim()}${v?.gender ? ` | ${v.gender}` : ""}]`;
+                      }
+
+                      quickGuestMutation.mutate(payload);
                     }}
                     disabled={quickGuestMutation.isPending}
                   >
@@ -1192,6 +1274,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#cbd5e1", marginBottom: 10,
   },
   quickGuestTitle: { fontSize: 12, fontWeight: "800", color: "#334155", marginBottom: 8 },
+  idTypeChip: {
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
+    backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",
+  },
+  idTypeChipActive: { backgroundColor: "#eff6ff", borderColor: "#2563eb" },
+  idTypeChipText: { fontSize: 11, fontWeight: "700", color: "#64748b" },
+  idTypeChipTextActive: { color: "#1d4ed8" },
+  quickIdBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#f0fdf4", borderWidth: 1, borderColor: "#bbf7d0",
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginTop: 5,
+  },
+  quickIdBadgeText: { fontSize: 11, fontWeight: "700", color: "#15803d" },
+  quickIdErrorText: { fontSize: 11, fontWeight: "600", color: "#b91c1c", marginTop: 4 },
   saveGuestBtn: {
     backgroundColor: "#2563eb", padding: 10, borderRadius: 8, alignItems: "center", marginTop: 10,
   },
