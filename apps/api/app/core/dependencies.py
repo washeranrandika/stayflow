@@ -44,6 +44,14 @@ class CurrentUser:
     def role(self) -> UserRoleEnum:
         return self.member.role
 
+    @property
+    def property_id(self) -> Optional[uuid.UUID]:
+        return self.member.property_id
+
+    @property
+    def property_name(self) -> Optional[str]:
+        return self.member.property.name if getattr(self.member, "property", None) else None
+
     def has_permission(self, permission: Permission) -> bool:
         """Check if the user's role has the given permission."""
         role_perms = ROLE_PERMISSIONS.get(self.role.value, [])
@@ -108,8 +116,10 @@ async def get_current_user(
         raise credentials_exception
 
     # Validate org membership (tenant isolation)
+    from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(OrganizationMember)
+        .options(selectinload(OrganizationMember.property))
         .where(
             OrganizationMember.user_id == user.id,
             OrganizationMember.organization_id == uuid.UUID(org_id),

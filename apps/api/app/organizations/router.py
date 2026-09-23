@@ -31,6 +31,13 @@ class InviteMemberBody(BaseModel):
     full_name: str
     password: str
     role: str  # OWNER, MANAGER, RECEPTIONIST, HOUSEKEEPER
+    property_id: Optional[str] = None
+
+
+class UpdateMemberBody(BaseModel):
+    role: Optional[str] = None
+    property_id: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 def _make_slug(name: str) -> str:
@@ -122,17 +129,70 @@ async def invite_member(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail={"code": "ALREADY_MEMBER", "message": "User is already a member"})
 
+    assigned_prop_id = None
+    if body.property_id and str(body.property_id).strip() not in ("", "all", "none", "null"):
+        try:
+            assigned_prop_id = uuid.UUID(str(body.property_id).strip())
+        except ValueError:
+            assigned_prop_id = None
+
     member = OrganizationMember(
         organization_id=current_user.organization_id,
         user_id=user.id,
         role=UserRoleEnum(body.role),
+        property_id=assigned_prop_id,
     )
     db.add(member)
     await audit_log(db, "staff.invite", "organization_member", str(member.id),
                    current_user.organization_id, current_user.user_id,
-                   new_values={"email": body.email, "role": body.role})
+                   new_values={"email": body.email, "role": body.role, "property_id": str(assigned_prop_id) if assigned_prop_id else None})
     await db.commit()
-    return success(data={"user_id": str(user.id), "role": body.role}, message="Staff member added")
+    return success(data={"user_id": str(user.id), "role": body.role, "property_id": str(assigned_prop_id) if assigned_prop_id else None}, message="Staff member added")
+
+
+@router.patch("/members/{member_id}", response_model=dict)
+async def update_member(
+    member_id: uuid.UUID,
+    body: UpdateMemberBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.STAFF_MANAGE)),
+):
+    """Update staff member role, assigned property, or status."""
+    result = await db.execute(
+        select(OrganizationMember).where(
+            OrganizationMember.id == member_id,
+            OrganizationMember.organization_id == current_user.organization_id,
+        )
+    )
+    member = result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    if body.role is not None:
+        member.role = UserRoleEnum(body.role)
+    if "property_id" in body.model_fields_set:
+        if body.property_id is not None and str(body.property_id).strip() not in ("", "all", "none", "null"):
+            try:
+                member.property_id = uuid.UUID(str(body.property_id).strip())
+            except ValueError:
+                member.property_id = None
+        else:
+            member.property_id = None
+    if body.is_active is not None:
+        member.is_active = body.is_active
+
+    await audit_log(
+        db, "staff.update", "organization_member", str(member.id),
+        current_user.organization_id, current_user.user_id,
+        new_values={
+            "role": member.role.value if member.role else None,
+            "property_id": str(member.property_id) if member.property_id else None,
+            "is_active": member.is_active,
+        }
+    )
+
+    await db.commit()
+    return success(message="Staff member updated")
 
 
 @router.get("/members", response_model=dict)
@@ -140,18 +200,22 @@ async def list_members(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.STAFF_MANAGE)),
 ):
+    from sqlalchemy.orm import selectinload
     result = await db.execute(
-        select(OrganizationMember, User)
-        .join(User, OrganizationMember.user_id == User.id)
+        select(OrganizationMember)
+        .options(selectinload(OrganizationMember.user), selectinload(OrganizationMember.property))
         .where(OrganizationMember.organization_id == current_user.organization_id)
+        .order_by(OrganizationMember.created_at.desc())
     )
-    rows = result.all()
+    members = result.scalars().all()
     return success(data=[{
         "member_id": str(m.id),
-        "user_id": str(u.id),
-        "email": u.email,
-        "full_name": u.full_name,
+        "user_id": str(m.user_id),
+        "email": m.user.email if m.user else "",
+        "full_name": m.user.full_name if m.user else "Staff Member",
         "role": m.role.value,
+        "property_id": str(m.property_id) if m.property_id else None,
+        "property_name": m.property.name if m.property else "All Properties",
         "is_active": m.is_active,
         "joined_at": m.created_at.isoformat(),
-    } for m, u in rows])
+    } for m in members])

@@ -129,13 +129,16 @@ export default function NewReservationScreen() {
   const [newGuestIdNumber, setNewGuestIdNumber] = useState("");
   const [newGuestIdType, setNewGuestIdType] = useState("NATIONAL_ID");
 
+  const [selectedPropId, setSelectedPropId] = useState<string>("");
+
   // ── Data Fetching ─────────────────────────────────────────────────────────────
   const { data: propsData } = useQuery({
     queryKey: ["properties", user?.id],
     queryFn: () => api.get("/properties"),
     enabled: !!user,
   });
-  const propertyId = propsData?.data?.data?.[0]?.id;
+  const properties: any[] = propsData?.data?.data || [];
+  const propertyId = user?.assigned_property_id || selectedPropId || properties[0]?.id;
 
   const { data: roomsData, isLoading: loadingRooms } = useQuery({
     queryKey: ["rooms", propertyId],

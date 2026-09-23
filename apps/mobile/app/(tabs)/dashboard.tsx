@@ -33,11 +33,32 @@ function getTimeOfDay(): string {
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const selectedPropertyId = useAuthStore((s) => s.selectedPropertyId);
+  const setSelectedPropertyId = useAuthStore((s) => s.setSelectedPropertyId);
   const insets = useSafeAreaInsets();
 
+  const assignedPropId = user?.assigned_property_id;
+  const isAssignedToSingleProperty = !!assignedPropId;
+  const activePropertyId = isAssignedToSingleProperty ? assignedPropId : (selectedPropertyId || "all");
+
+  const { data: propsData } = useQuery({
+    queryKey: ["properties", user?.id],
+    queryFn: async () => {
+      const res = await api.get("/properties");
+      return res.data?.data || [];
+    },
+    enabled: !!user,
+  });
+
+  const properties: any[] = propsData || [];
+  const currentProperty = properties.find((p) => p.id === activePropertyId);
+
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => api.get("/reports/dashboard"),
+    queryKey: ["dashboard", activePropertyId],
+    queryFn: () =>
+      api.get("/reports/dashboard", {
+        params: activePropertyId !== "all" ? { property_id: activePropertyId } : {},
+      }),
     refetchInterval: 60_000,
   });
 
@@ -73,7 +94,13 @@ export default function DashboardScreen() {
                 <Text style={styles.pmsBadgeText}>PMS</Text>
               </View>
             </View>
-            <Text style={styles.propertySubtitle}>Hotel & Property Management</Text>
+            <Text style={styles.propertySubtitle}>
+              {isAssignedToSingleProperty
+                ? `📍 ${user?.assigned_property_name || "Assigned Branch"}`
+                : currentProperty
+                ? `📍 ${currentProperty.name}`
+                : "🌐 All Hotel Properties"}
+            </Text>
           </View>
         </View>
 
@@ -90,6 +117,47 @@ export default function DashboardScreen() {
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Property Switcher bar for multi-property owners */}
+      {!isAssignedToSingleProperty && properties.length > 1 && (
+        <View style={{ backgroundColor: "#ffffff", borderBottomWidth: 1, borderBottomColor: "#e2e8f0", paddingVertical: 6 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setSelectedPropertyId("all")}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+                borderRadius: 20,
+                backgroundColor: activePropertyId === "all" ? "#2563eb" : "#f1f5f9",
+                borderWidth: 1,
+                borderColor: activePropertyId === "all" ? "#2563eb" : "#e2e8f0",
+              }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: "700", color: activePropertyId === "all" ? "#ffffff" : "#475569" }}>
+                🌐 All Properties
+              </Text>
+            </TouchableOpacity>
+            {properties.map((p: any) => (
+              <TouchableOpacity
+                key={p.id}
+                onPress={() => setSelectedPropertyId(p.id)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 5,
+                  borderRadius: 20,
+                  backgroundColor: activePropertyId === p.id ? "#2563eb" : "#f1f5f9",
+                  borderWidth: 1,
+                  borderColor: activePropertyId === p.id ? "#2563eb" : "#e2e8f0",
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "700", color: activePropertyId === p.id ? "#ffffff" : "#475569" }}>
+                  📍 {p.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* ── Scrollable Dashboard Content ─────────────────────────────────── */}
       <ScrollView

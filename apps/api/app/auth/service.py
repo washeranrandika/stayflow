@@ -57,8 +57,10 @@ class AuthService:
             )
 
         # Get primary org membership (most recently active)
+        from sqlalchemy.orm import selectinload
         result = await db.execute(
             select(OrganizationMember)
+            .options(selectinload(OrganizationMember.property))
             .where(
                 OrganizationMember.user_id == user.id,
                 OrganizationMember.is_active == True,
@@ -111,13 +113,25 @@ class AuthService:
 
         await db.commit()
 
+        user_resp = UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            phone=user.phone,
+            role=member.role.value,
+            assigned_property_id=member.property_id,
+            assigned_property_name=member.property.name if getattr(member, "property", None) else None,
+            is_active=user.is_active,
+            created_at=user.created_at,
+        )
+
         return LoginResponse(
             tokens=TokenResponse(
                 access_token=access_token,
                 refresh_token=raw_refresh,
                 expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             ),
-            user=UserResponse.model_validate(user),
+            user=user_resp,
         )
 
     async def refresh(self, db: AsyncSession, refresh_token: str) -> TokenResponse:

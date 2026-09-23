@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { propertiesApi } from "@/lib/api";
+import { usersApi, propertiesApi } from "@/lib/api";
 import { useSearchParams } from "next/navigation";
 
 export interface PropertyOption {
@@ -15,15 +15,30 @@ export function useActiveProperty() {
   const searchParams = useSearchParams();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
 
+  const { data: userData } = useQuery({
+    queryKey: ["currentUserProfile"],
+    queryFn: () => usersApi.me(),
+  });
+
   const { data: propsData, isLoading: isLoadingProperties } = useQuery({
     queryKey: ["properties"],
     queryFn: () => propertiesApi.list(),
   });
 
   const properties: PropertyOption[] = propsData?.data?.data || [];
+  const user = userData?.data?.data;
+  const userAssignedPropertyId = user?.assigned_property_id;
 
-  // 1. Initialize from URL params or localStorage
+  // 1. Initialize from URL params, user assigned property, or localStorage
   useEffect(() => {
+    // Priority 1: User's explicitly assigned property branch
+    if (userAssignedPropertyId) {
+      setSelectedPropertyId(userAssignedPropertyId);
+      localStorage.setItem("sf_selected_property", userAssignedPropertyId);
+      return;
+    }
+
+    // Priority 2: URL Query parameter
     const urlProp = searchParams?.get("property_id");
     if (urlProp) {
       setSelectedPropertyId(urlProp);
@@ -31,13 +46,14 @@ export function useActiveProperty() {
       return;
     }
 
+    // Priority 3: Local storage or all
     const saved = localStorage.getItem("sf_selected_property");
     if (saved) {
       setSelectedPropertyId(saved);
     } else {
       setSelectedPropertyId("all");
     }
-  }, [searchParams]);
+  }, [searchParams, userAssignedPropertyId]);
 
   // 2. Listen to custom 'property-changed' events dispatched across components
   useEffect(() => {

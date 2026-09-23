@@ -53,12 +53,33 @@ function fmtTime(iso?: any) {
   }
 }
 
+import { useAuthStore } from "@/store/auth";
+import { Building2 } from "lucide-react-native";
+
 export default function BookingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const selectedPropertyId = useAuthStore((s) => s.selectedPropertyId);
+  const setSelectedPropertyId = useAuthStore((s) => s.setSelectedPropertyId);
+
+  const assignedPropId = user?.assigned_property_id;
+  const isAssignedToSingleProperty = !!assignedPropId;
+  const activePropertyId = isAssignedToSingleProperty ? assignedPropId : (selectedPropertyId || "all");
+
   const [selected, setSelected] = useState<any>(null);
   const [filter, setFilter] = useState("ALL");
+
+  const { data: propsData } = useQuery({
+    queryKey: ["properties", user?.id],
+    queryFn: async () => {
+      const res = await api.get("/properties");
+      return res.data?.data || [];
+    },
+    enabled: !!user,
+  });
+  const properties: any[] = propsData || [];
 
   // Query 1: Reservations
   const {
@@ -69,11 +90,14 @@ export default function BookingsScreen() {
     refetch: refetchReservations,
     isRefetching: isRefetchingRes,
   } = useQuery({
-    queryKey: ["reservations", filter],
+    queryKey: ["reservations", filter, activePropertyId],
     queryFn: async () => {
       const params: any = { limit: 50 };
       if (filter !== "ALL" && filter !== "CHECKED_IN") {
         params.status = filter;
+      }
+      if (activePropertyId && activePropertyId !== "all") {
+        params.property_id = activePropertyId;
       }
       const res = await api.get("/bookings", { params });
       return res.data?.data || [];
@@ -87,9 +111,13 @@ export default function BookingsScreen() {
     refetch: refetchStays,
     isRefetching: isRefetchingStays,
   } = useQuery({
-    queryKey: ["mobileActiveStays"],
+    queryKey: ["mobileActiveStays", activePropertyId],
     queryFn: async () => {
-      const res = await api.get("/stays/active");
+      const params: any = {};
+      if (activePropertyId && activePropertyId !== "all") {
+        params.property_id = activePropertyId;
+      }
+      const res = await api.get("/stays/active", { params });
       return res.data?.data || [];
     },
   });

@@ -39,6 +39,8 @@ async def get_me(
         "phone": u.phone,
         "is_active": u.is_active,
         "role": current_user.role.value,
+        "assigned_property_id": str(current_user.property_id) if current_user.property_id else None,
+        "assigned_property_name": current_user.property_name,
         "organization_id": str(current_user.organization_id),
         "organization_name": current_user.organization.name,
         "created_at": u.created_at.isoformat(),

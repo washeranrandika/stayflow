@@ -1,11 +1,9 @@
 /**
  * StayFlow Mobile – Rooms Screen
- * Lists all rooms with status badges. Tapping opens a bottom-sheet with actions.
- * AVAILABLE → Check-in shortcut
- * OCCUPIED  → View active stay + checkout shortcut
- * CLEANING  → View housekeeping task info
+ * Lists all rooms with property scoping and status badges.
+ * Supports Member-based property assignment and multi-property filtering.
  */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, FlatList, StyleSheet, RefreshControl,
   TouchableOpacity, ActivityIndicator, Modal, ScrollView, Alert, Platform
@@ -15,7 +13,7 @@ import { api } from "@/lib/api";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/store/auth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Users, AirVent, LogIn, LogOut, Brush, Info, X } from "lucide-react-native";
+import { Users, AirVent, LogIn, LogOut, Brush, Info, X, Building2, MapPin, CheckCircle } from "lucide-react-native";
 
 const STATUS_MAP: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   AVAILABLE:      { bg: "#f0fdf4", border: "#bbf7d0", text: "#166534", dot: "#22c55e" },
@@ -26,48 +24,91 @@ const STATUS_MAP: Record<string, { bg: string; border: string; text: string; dot
   OUT_OF_SERVICE: { bg: "#f8fafc", border: "#e2e8f0", text: "#475569", dot: "#94a3b8" },
 };
 
-// Filter chips config
 const FILTERS = ["ALL", "AVAILABLE", "OCCUPIED", "CLEANING", "RESERVED", "MAINTENANCE"];
 
 export default function RoomsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
+  const selectedPropertyId = useAuthStore((s) => s.selectedPropertyId);
+  const setSelectedPropertyId = useAuthStore((s) => s.setSelectedPropertyId);
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<string>("ALL");
+
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [activeStay, setActiveStay] = useState<any>(null);
   const [loadingStay, setLoadingStay] = useState(false);
 
-  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["rooms", user?.id],
+  // 1. Fetch organization properties
+  const { data: propsData } = useQuery({
+    queryKey: ["properties", user?.id],
     queryFn: async () => {
-      const propsRes = await api.get("/properties");
-      const props = propsRes.data.data;
-      if (!props || props.length === 0) return [];
-      const roomsRes = await api.get(`/rooms/by-property/${props[0].id}`);
-      return roomsRes.data.data;
+      const res = await api.get("/properties");
+      return res.data?.data || [];
     },
     enabled: !!user,
   });
 
-  const getErrorMessage = (err: any) => {
-    if (!err) return null;
-    const detail = err.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    if (detail?.message) return detail.message;
-    if (err.message) return err.message;
-    return "An unexpected error occurred.";
-  };
+  const properties: any[] = propsData || [];
+  const assignedPropId = user?.assigned_property_id;
+  const isAssignedToSingleProperty = !!assignedPropId;
+
+  // Active property ID resolution
+  const activePropertyId = isAssignedToSingleProperty
+    ? assignedPropId
+    : selectedPropertyId || "all";
+
+  // 2. Fetch rooms
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
+    queryKey: ["rooms", user?.id, activePropertyId, properties],
+    queryFn: async () => {
+      if (properties.length === 0) return [];
+
+      if (activePropertyId && activePropertyId !== "all") {
+        const res = await api.get(`/rooms/by-property/${activePropertyId}`);
+        const propName = properties.find((p) => p.id === activePropertyId)?.name || "Property";
+        return (res.data?.data || []).map((r: any) => ({ ...r, property_name: propName }));
+      }
+
+      // Fetch all rooms across all properties
+      const allRooms: any[] = [];
+      await Promise.all(
+        properties.map(async (p: any) => {
+          try {
+            const res = await api.get(`/rooms/by-property/${p.id}`);
+            const rms = (res.data?.data || []).map((r: any) => ({
+              ...r,
+              property_name: p.name,
+              property_city: p.city,
+            }));
+            allRooms.push(...rms);
+          } catch {
+            /* ignore individual failure */
+          }
+        })
+      );
+      return allRooms;
+    },
+    enabled: !!user && properties.length > 0,
+  });
 
   const rooms: any[] = data || [];
-  const filtered = filter === "ALL" ? rooms : rooms.filter((r) => r.status === filter);
+  const filtered = statusFilter === "ALL" ? rooms : rooms.filter((r) => r.status === statusFilter);
 
-  // Count per status for badge numbers
-  const counts = rooms.reduce((acc: any, r: any) => {
-    acc[r.status] = (acc[r.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Status Change Mutation (e.g. Mark Clean)
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/rooms/${id}/status`, { status }),
+    onSuccess: () => {
+      Alert.alert("Success", "Room status updated!");
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setSelectedRoom(null);
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", err.response?.data?.detail?.message || "Failed to update status");
+    },
+  });
 
   const handleRoomPress = async (room: any) => {
     setSelectedRoom(room);
@@ -92,7 +133,17 @@ export default function RoomsScreen() {
     return (
       <TouchableOpacity style={styles.roomCard} onPress={() => handleRoomPress(item)} activeOpacity={0.75}>
         <View style={styles.roomHeader}>
-          <Text style={styles.roomNumber}>Room {item.room_number}</Text>
+          <View>
+            <Text style={styles.roomNumber}>Room {item.room_number}</Text>
+            {item.property_name && (
+              <View style={styles.propertyTag}>
+                <MapPin size={10} color="#64748b" />
+                <Text style={styles.propertyTagText} numberOfLines={1}>
+                  {item.property_name}
+                </Text>
+              </View>
+            )}
+          </View>
           <View style={[styles.badge, { backgroundColor: s.bg, borderColor: s.border }]}>
             <View style={[styles.dot, { backgroundColor: s.dot }]} />
             <Text style={[styles.badgeText, { color: s.text }]}>
@@ -101,287 +152,591 @@ export default function RoomsScreen() {
           </View>
         </View>
 
-        <Text style={styles.roomType}>{item.room_type?.name}</Text>
+        <Text style={styles.roomType}>{item.room_type?.name || "Standard Room"}</Text>
 
         <View style={styles.features}>
           <View style={styles.feature}>
-            <Users size={13} color="#94a3b8" />
+            <Users size={12} color="#94a3b8" />
             <Text style={styles.featureText}>Up to {item.max_guests}</Text>
           </View>
           {item.room_type?.is_ac && (
             <View style={styles.feature}>
-              <AirVent size={13} color="#94a3b8" />
-              <Text style={styles.featureText}>AC</Text>
+              <AirVent size={12} color="#0284c7" />
+              <Text style={[styles.featureText, { color: "#0284c7", fontWeight: "600" }]}>AC</Text>
             </View>
           )}
-          <View style={styles.feature}>
-            <Text style={styles.featureText}>Rs. {Number(item.room_type?.base_nightly_rate || 0).toLocaleString()}/night</Text>
-          </View>
+          {item.floor && (
+            <View style={styles.feature}>
+              <Text style={styles.featureText}>Fl {item.floor}</Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={styles.container}>
-      {/* Top Header */}
-      <View style={[styles.topBar]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 12 : 8) }]}>
+      {/* ── Fixed Header ────────────────────────────────────────────────────── */}
+      <View style={styles.header}>
         <View>
-          <Text style={styles.topBarTitle}>Rooms & Inventory</Text>
-          <Text style={styles.topBarSub}>{rooms.length} total rooms registered</Text>
+          <Text style={styles.title}>Room Inventory</Text>
+          <Text style={styles.subtitle}>
+            {isAssignedToSingleProperty
+              ? `Scoped to ${user?.assigned_property_name || "Assigned Property"}`
+              : `${rooms.length} rooms configured across properties`}
+          </Text>
         </View>
+
+        {isAssignedToSingleProperty && (
+          <View style={styles.memberPropertyBadge}>
+            <Building2 size={12} color="#1d4ed8" />
+            <Text style={styles.memberPropertyText} numberOfLines={1}>
+              {user?.assigned_property_name || "Your Branch"}
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Filter bar */}
-      <View style={styles.filterBarContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterBar}
-          contentContainerStyle={styles.filterContent}
-        >
-          {FILTERS.map((f) => (
+      {/* ── Property Switcher Chips (For Owners & Multi-Property Staff) ───── */}
+      {!isAssignedToSingleProperty && properties.length > 1 && (
+        <View style={styles.propertyChipContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.propertyChipScroll}>
             <TouchableOpacity
-              key={f}
-              style={[styles.chip, filter === f && styles.chipActive]}
-              onPress={() => setFilter(f)}
+              onPress={() => setSelectedPropertyId("all")}
+              style={[
+                styles.propertyChip,
+                activePropertyId === "all" && styles.propertyChipActive,
+              ]}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
-                {f === "ALL" ? `All (${rooms.length})` : `${f.replace(/_/g, " ")} (${counts[f] || 0})`}
+              <Text
+                style={[
+                  styles.propertyChipText,
+                  activePropertyId === "all" && styles.propertyChipTextActive,
+                ]}
+              >
+                🌐 All Properties ({rooms.length})
               </Text>
             </TouchableOpacity>
-          ))}
+
+            {properties.map((p: any) => {
+              const isSelected = activePropertyId === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  onPress={() => setSelectedPropertyId(p.id)}
+                  style={[
+                    styles.propertyChip,
+                    isSelected && styles.propertyChipActive,
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Building2 size={12} color={isSelected ? "#ffffff" : "#64748b"} style={{ marginRight: 4 }} />
+                  <Text
+                    style={[
+                      styles.propertyChipText,
+                      isSelected && styles.propertyChipTextActive,
+                    ]}
+                  >
+                    {p.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ── Status Filter Chips ────────────────────────────────────────────── */}
+      <View style={styles.statusChipContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusChipScroll}>
+          {FILTERS.map((st) => {
+            const isSelected = statusFilter === st;
+            return (
+              <TouchableOpacity
+                key={st}
+                onPress={() => setStatusFilter(st)}
+                style={[
+                  styles.filterChip,
+                  isSelected && styles.filterChipActive,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    isSelected && styles.filterChipTextActive,
+                  ]}
+                >
+                  {st.replace(/_/g, " ")}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
+      {/* ── Room Cards Grid ───────────────────────────────────────────────── */}
       {isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#2563eb" />
+          <Text style={styles.loadingText}>Loading room grid...</Text>
         </View>
-      ) : isError ? (
-        <View style={[styles.center, { padding: 24 }]}>
-          <View style={{
-            backgroundColor: "#fef2f2",
-            borderColor: "#fecaca",
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: 18,
-            width: "100%",
-            alignItems: "center",
-          }}>
-            <Text style={{ color: "#991b1b", fontWeight: "700", fontSize: 16, marginBottom: 6 }}>
-              ⚠️ Unable to Load Rooms
-            </Text>
-            <Text style={{ color: "#b91c1c", fontSize: 13, textAlign: "center", marginBottom: 14 }}>
-              {getErrorMessage(error)}
-            </Text>
-            <TouchableOpacity
-              onPress={() => refetch()}
-              style={{
-                backgroundColor: "#ef4444",
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 8,
-              }}
-            >
-              <Text style={{ color: "#ffffff", fontWeight: "600", fontSize: 13 }}>Tap to Retry</Text>
-            </TouchableOpacity>
-          </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🏨</Text>
+          <Text style={styles.emptyTitle}>No rooms found</Text>
+          <Text style={styles.emptySubtitle}>
+            {statusFilter !== "ALL"
+              ? `No rooms currently in ${statusFilter.toLowerCase()} status.`
+              : "No rooms configured for this property yet."}
+          </Text>
         </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           renderItem={renderRoom}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
           numColumns={2}
-          columnWrapperStyle={styles.row}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No rooms match this filter.</Text>
-            </View>
-          }
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Room detail bottom-sheet */}
-      <Modal visible={!!selectedRoom} animationType="slide" transparent presentationStyle="overFullScreen">
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
+      {/* ── ROOM DETAIL / ACTION MODAL ────────────────────────────────────── */}
+      {selectedRoom && (
+        <Modal visible={!!selectedRoom} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Room {selectedRoom.room_number}</Text>
+                  <Text style={styles.modalSubTitle}>
+                    {selectedRoom.property_name ? `${selectedRoom.property_name} • ` : ""}
+                    {selectedRoom.room_type?.name || "Standard Room"}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setSelectedRoom(null)} style={styles.modalClose}>
+                  <X size={18} color="#64748b" />
+                </TouchableOpacity>
+              </View>
 
-            {selectedRoom && (
-              <>
-                <View style={styles.sheetHeader}>
-                  <View>
-                    <Text style={styles.sheetTitle}>Room {selectedRoom.room_number}</Text>
-                    <Text style={styles.sheetSub}>{selectedRoom.room_type?.name}</Text>
+              <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                {/* Status info */}
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Current Status</Text>
+                  <View style={[styles.badge, { backgroundColor: STATUS_MAP[selectedRoom.status]?.bg || "#f1f5f9" }]}>
+                    <Text style={[styles.badgeText, { color: STATUS_MAP[selectedRoom.status]?.text || "#334155" }]}>
+                      {selectedRoom.status.replace(/_/g, " ")}
+                    </Text>
                   </View>
-                  <TouchableOpacity onPress={() => setSelectedRoom(null)}>
-                    <X size={22} color="#64748b" />
-                  </TouchableOpacity>
                 </View>
 
-                {/* Status */}
-                <View style={[styles.statusPill, {
-                  backgroundColor: (STATUS_MAP[selectedRoom.status] ?? STATUS_MAP["OUT_OF_SERVICE"]).bg,
-                  borderColor: (STATUS_MAP[selectedRoom.status] ?? STATUS_MAP["OUT_OF_SERVICE"]).border,
-                }]}>
-                  <View style={[styles.dot, { backgroundColor: (STATUS_MAP[selectedRoom.status] ?? STATUS_MAP["OUT_OF_SERVICE"]).dot }]} />
-                  <Text style={[styles.statusPillText, {
-                    color: (STATUS_MAP[selectedRoom.status] ?? STATUS_MAP["OUT_OF_SERVICE"]).text,
-                  }]}>{selectedRoom.status.replace(/_/g, " ")}</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Max Capacity</Text>
+                  <Text style={styles.detailVal}>{selectedRoom.max_guests} Guests</Text>
                 </View>
 
-                {/* Active stay info for OCCUPIED */}
-                {selectedRoom.status === "OCCUPIED" && (
-                  <View style={styles.stayInfo}>
-                    {loadingStay ? (
-                      <ActivityIndicator color="#2563eb" />
-                    ) : activeStay ? (
-                      <>
-                        <Text style={styles.stayInfoLabel}>Current Guest</Text>
-                        <Text style={styles.stayInfoValue}>{activeStay.primary_guest?.full_name ?? "—"}</Text>
-                        <Text style={styles.stayInfoSub}>
-                          Checked in: {new Date(activeStay.actual_check_in).toLocaleString("en-US", {
-                            month: "short", day: "numeric",
-                            hour: "2-digit", minute: "2-digit"
-                          })}
-                        </Text>
-                        <Text style={styles.stayInfoSub}>
-                          Expected checkout: {new Date(activeStay.expected_checkout).toLocaleString("en-US", {
-                            month: "short", day: "numeric",
-                            hour: "2-digit", minute: "2-digit"
-                          })}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text style={styles.stayInfoSub}>No active stay data found.</Text>
-                    )}
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Nightly Rate</Text>
+                  <Text style={[styles.detailVal, { color: "#16a34a", fontWeight: "700" }]}>
+                    Rs. {Number(selectedRoom.room_type?.base_nightly_rate || 0).toLocaleString()}
+                  </Text>
+                </View>
+
+                {selectedRoom.notes && (
+                  <View style={[styles.detailRow, { flexDirection: "column", alignItems: "flex-start" }]}>
+                    <Text style={styles.detailLabel}>Notes</Text>
+                    <Text style={[styles.detailVal, { marginTop: 2, color: "#64748b" }]}>{selectedRoom.notes}</Text>
                   </View>
                 )}
 
-                {/* Actions */}
-                <View style={styles.actions}>
-                  {selectedRoom.status === "AVAILABLE" && (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => {
-                        setSelectedRoom(null);
-                        router.push("/check-in");
-                      }}
-                    >
-                      <LogIn size={18} color="#fff" />
-                      <Text style={styles.actionBtnText}>Check-in Guest</Text>
-                    </TouchableOpacity>
-                  )}
+                {/* Active stay details if occupied */}
+                {loadingStay && (
+                  <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 12 }} />
+                )}
+                {activeStay && (
+                  <View style={styles.stayBox}>
+                    <Text style={styles.stayBoxTitle}>👤 Current Guest</Text>
+                    <Text style={styles.stayGuestName}>{activeStay.primary_guest?.full_name || "In-House Guest"}</Text>
+                    <Text style={styles.staySub}>
+                      Expected Checkout: {new Date(activeStay.expected_checkout).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
 
-                  {selectedRoom.status === "OCCUPIED" && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: "#0f172a" }]}
-                      onPress={() => {
-                        setSelectedRoom(null);
-                        router.push("/checkout");
-                      }}
-                    >
-                      <LogOut size={18} color="#fff" />
-                      <Text style={styles.actionBtnText}>Go to Checkout</Text>
-                    </TouchableOpacity>
-                  )}
+              {/* Action Buttons */}
+              <View style={styles.modalActions}>
+                {selectedRoom.status === "AVAILABLE" && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: "#2563eb" }]}
+                    onPress={() => {
+                      const r = selectedRoom;
+                      setSelectedRoom(null);
+                      router.push({
+                        pathname: "/check-in",
+                        params: { room_id: r.id, property_id: r.property_id },
+                      } as any);
+                    }}
+                  >
+                    <LogIn size={16} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.actionBtnText}>Walk-in Check-in</Text>
+                  </TouchableOpacity>
+                )}
 
-                  {selectedRoom.status === "CLEANING" && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: "#b45309" }]}
-                      onPress={() => {
-                        setSelectedRoom(null);
-                        router.push("/housekeeping");
-                      }}
-                    >
-                      <Brush size={18} color="#fff" />
-                      <Text style={styles.actionBtnText}>View Housekeeping Tasks</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            )}
+                {selectedRoom.status === "CLEANING" && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: "#16a34a" }]}
+                    onPress={() => statusMutation.mutate({ id: selectedRoom.id, status: "AVAILABLE" })}
+                    disabled={statusMutation.isPending}
+                  >
+                    <Brush size={16} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.actionBtnText}>
+                      {statusMutation.isPending ? "Updating..." : "Mark as Clean & Ready"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {selectedRoom.status === "OCCUPIED" && activeStay && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: "#dc2626" }]}
+                    onPress={() => {
+                      const stayId = activeStay.id;
+                      setSelectedRoom(null);
+                      router.push({ pathname: "/checkout", params: { stayId } } as any);
+                    }}
+                  >
+                    <LogOut size={16} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.actionBtnText}>Proceed to Checkout</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  topBar: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    paddingTop: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
   },
-  topBarTitle: { fontSize: 19, fontWeight: "900", color: "#0f172a", letterSpacing: -0.3 },
-  topBarSub: { fontSize: 11, color: "#64748b", marginTop: 2, fontWeight: "600" },
-  filterBarContainer: {
-    backgroundColor: "#ffffff",
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  memberPropertyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    maxWidth: 160,
+  },
+  memberPropertyText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1d4ed8",
+  },
+  propertyChipContainer: {
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
-  filterBar: { flexGrow: 0 },
-  filterContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, alignItems: "center" },
-  chip: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+  propertyChipScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  propertyChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    flexShrink: 0,
   },
-  chipActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
-  chipText: { fontSize: 12, fontWeight: "700", color: "#64748b" },
-  chipTextActive: { color: "#fff" },
-  list: { padding: 12, paddingBottom: 40, gap: 10 },
-  row: { gap: 10 },
+  propertyChipActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  propertyChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  propertyChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  statusChipContainer: {
+    paddingVertical: 8,
+  },
+  statusChipScroll: {
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  filterChipActive: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  filterChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  listContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 24,
+  },
+  columnWrapper: {
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
   roomCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: "#e2e8f0",
+    flex: 1,
+    marginHorizontal: 4,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  roomHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 4 },
-  roomNumber: { fontSize: 17, fontWeight: "800", color: "#0f172a" },
-  badge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-  roomType: { fontSize: 12, color: "#475569", marginBottom: 10 },
-  features: { gap: 4 },
-  feature: { flexDirection: "row", alignItems: "center", gap: 4 },
-  featureText: { fontSize: 11, color: "#94a3b8" },
-  empty: { padding: 40, alignItems: "center" },
-  emptyText: { color: "#94a3b8", fontSize: 14 },
-
-  // Modal
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, paddingBottom: 36,
+  roomHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 6,
   },
-  sheetHandle: { width: 40, height: 4, backgroundColor: "#e2e8f0", borderRadius: 2, alignSelf: "center", marginBottom: 18 },
-  sheetHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
-  sheetTitle: { fontSize: 20, fontWeight: "700", color: "#0f172a" },
-  sheetSub: { fontSize: 13, color: "#64748b", marginTop: 2 },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, alignSelf: "flex-start", marginBottom: 16 },
-  statusPillText: { fontSize: 12, fontWeight: "700" },
-  stayInfo: { backgroundColor: "#f8fafc", borderRadius: 10, padding: 14, marginBottom: 16, gap: 4 },
-  stayInfoLabel: { fontSize: 11, fontWeight: "700", color: "#64748b", textTransform: "uppercase" },
-  stayInfoValue: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
-  stayInfoSub: { fontSize: 12, color: "#64748b" },
-  actions: { gap: 10 },
+  roomNumber: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  propertyTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginTop: 2,
+  },
+  propertyTagText: {
+    fontSize: 9.5,
+    color: "#64748b",
+    fontWeight: "600",
+    maxWidth: 80,
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  roomType: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  features: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingTop: 6,
+  },
+  feature: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  featureText: {
+    fontSize: 10.5,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: "#64748b",
+    marginTop: 10,
+    fontWeight: "500",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  emptyIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalSubTitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  modalClose: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f8fafc",
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  detailVal: {
+    fontSize: 13,
+    color: "#0f172a",
+    fontWeight: "600",
+  },
+  stayBox: {
+    backgroundColor: "#eff6ff",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  stayBoxTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1d4ed8",
+    marginBottom: 2,
+  },
+  stayGuestName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  staySub: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  modalActions: {
+    marginTop: 16,
+    gap: 8,
+  },
   actionBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, backgroundColor: "#2563eb", borderRadius: 12, padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  actionBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  actionBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
 });

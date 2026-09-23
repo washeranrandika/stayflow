@@ -10,6 +10,8 @@ interface AuthState {
   user: any | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  selectedPropertyId: string;
+  setSelectedPropertyId: (id: string) => void;
   setUser: (user: any) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (data: { full_name: string; email: string; password: string; hotel_name?: string; phone?: string }) => Promise<void>;
@@ -21,7 +23,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
-  setUser: (user: any) => set({ user }),
+  selectedPropertyId: "all",
+  setSelectedPropertyId: (id: string) => set({ selectedPropertyId: id }),
+  setUser: (user: any) => {
+    const assignedPropId = user?.assigned_property_id;
+    set({
+      user,
+      selectedPropertyId: assignedPropId || get().selectedPropertyId || "all",
+    });
+  },
 
   initialize: async () => {
     try {
@@ -29,7 +39,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (token) {
         setAuthToken(token);
         const res = await api.get("/users/me");
-        set({ user: res.data.data, isAuthenticated: true });
+        const userData = res.data.data;
+        set({
+          user: userData,
+          isAuthenticated: true,
+          selectedPropertyId: userData?.assigned_property_id || "all",
+        });
       }
     } catch {
       setAuthToken(null);
@@ -53,9 +68,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const meRes = await api.get("/users/me", {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
-      set({ user: meRes.data.data, isAuthenticated: true });
+      const userData = meRes.data.data;
+      set({
+        user: userData,
+        isAuthenticated: true,
+        selectedPropertyId: userData?.assigned_property_id || "all",
+      });
     } catch {
-      set({ user, isAuthenticated: true });
+      set({
+        user,
+        isAuthenticated: true,
+        selectedPropertyId: user?.assigned_property_id || "all",
+      });
     }
   },
 
@@ -70,9 +94,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const meRes = await api.get("/users/me", {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
-      set({ user: meRes.data.data, isAuthenticated: true });
+      const userData = meRes.data.data;
+      set({
+        user: userData,
+        isAuthenticated: true,
+        selectedPropertyId: userData?.assigned_property_id || "all",
+      });
     } catch {
-      set({ user, isAuthenticated: true });
+      set({
+        user,
+        isAuthenticated: true,
+        selectedPropertyId: user?.assigned_property_id || "all",
+      });
     }
   },
 

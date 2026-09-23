@@ -34,6 +34,9 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     phone: Optional[str] = None
+    role: Optional[str] = None
+    assigned_property_id: Optional[uuid.UUID] = None
+    assigned_property_name: Optional[str] = None
     is_active: bool
     created_at: datetime
 

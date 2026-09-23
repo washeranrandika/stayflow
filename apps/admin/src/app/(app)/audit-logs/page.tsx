@@ -2,17 +2,32 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { auditApi } from "@/lib/api";
-import { FileText, Shield, Clock, User, Filter } from "lucide-react";
+import { FileText, Shield, Clock, User, Filter, Search, CheckCircle2 } from "lucide-react";
+import clsx from "clsx";
+
+const CATEGORIES = [
+  { label: "All Logs", value: "" },
+  { label: "Auth & Logins", value: "auth." },
+  { label: "Stays & Check-ins", value: "stay." },
+  { label: "Rooms", value: "room" },
+  { label: "Billing & Folios", value: "folio" },
+  { label: "Staff & Members", value: "staff." },
+];
 
 export default function AuditLogsPage() {
-  const [actionFilter, setActionFilter] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const activeActionFilter = searchQuery || selectedCategory;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["auditLogs", actionFilter],
-    queryFn: () => auditApi.list(actionFilter ? { action: actionFilter } : {}),
+    queryKey: ["auditLogs", activeActionFilter],
+    queryFn: () => auditApi.list(activeActionFilter ? { action: activeActionFilter } : {}),
   });
 
-  const logs = data?.data?.data || [];
+  const rawData = data?.data?.data;
+  const logs = Array.isArray(rawData) ? rawData : rawData?.items || [];
+  const total = rawData?.total ?? logs.length;
 
   return (
     <div className="space-y-6">
@@ -24,14 +39,41 @@ export default function AuditLogsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Filter by action (e.g. stay.check_in)"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search action or entity..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 shadow-sm"
+            />
+          </div>
         </div>
+      </div>
+
+      {/* Category Filter Chips */}
+      <div className="flex flex-wrap gap-2">
+        {CATEGORIES.map((cat) => {
+          const isActive = (!searchQuery && selectedCategory === cat.value) || (searchQuery === cat.value);
+          return (
+            <button
+              key={cat.label}
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedCategory(cat.value);
+              }}
+              className={clsx(
+                "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-sm",
+                isActive
+                  ? "bg-slate-900 text-white"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {cat.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -53,7 +95,9 @@ export default function AuditLogsPage() {
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">No audit records found.</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                    No audit records found {activeActionFilter ? `matching "${activeActionFilter}"` : ""}.
+                  </td>
                 </tr>
               ) : (
                 logs.map((log: any) => (
@@ -62,7 +106,7 @@ export default function AuditLogsPage() {
                       {new Date(log.created_at).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700">
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
                         {log.action}
                       </span>
                     </td>

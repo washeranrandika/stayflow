@@ -124,4 +124,6 @@ export const orgApi = {
   get: () => apiClient.get("/organizations/me"),
   members: () => apiClient.get("/organizations/members"),
   inviteMember: (data: any) => apiClient.post("/organizations/members", data),
+  updateMember: (memberId: string, data: any) =>
+    apiClient.patch(`/organizations/members/${memberId}`, data),
 };

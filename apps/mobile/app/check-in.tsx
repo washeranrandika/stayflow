@@ -65,6 +65,8 @@ export default function MobileCheckInScreen() {
   const [newGuestIdType, setNewGuestIdType] = useState("NIC");
   const [newGuestIdNumber, setNewGuestIdNumber] = useState("");
 
+  const [selectedPropId, setSelectedPropId] = useState<string>("");
+
   // ── Data fetching ──────────────────────────────────────────────────────────
   const {
     data: propsData,
@@ -77,7 +79,8 @@ export default function MobileCheckInScreen() {
     queryFn: () => api.get("/properties"),
     enabled: !!user,
   });
-  const propertyId = propsData?.data?.data?.[0]?.id;
+  const properties: any[] = propsData?.data?.data || [];
+  const propertyId = user?.assigned_property_id || selectedPropId || properties[0]?.id;
 
   const {
     data: roomsData,
