@@ -40,8 +40,20 @@ class CheckInBody(BaseModel):
     notes: Optional[str] = None
 
 
+class DamageItem(BaseModel):
+    description: str
+    amount: Decimal
+    notes: Optional[str] = None
+
+
 class CheckoutBody(BaseModel):
     discount: Decimal = Decimal("0")
+    notes: Optional[str] = None
+    damage_items: Optional[list[DamageItem]] = None
+
+
+class ExtendStayBody(BaseModel):
+    expected_checkout: datetime
     notes: Optional[str] = None
 
 
@@ -51,15 +63,22 @@ def _serialize_stay(s):
         "reservation_id": str(s.reservation_id) if s.reservation_id else None,
         "property_id": str(s.property_id),
         "room_id": str(s.room_id),
-        "room": {"id": str(s.room.id), "room_number": s.room.room_number} if s.room else None,
+        "room": {"id": str(s.room.id), "room_number": s.room.room_number, "max_guests": getattr(s.room, "max_guests", 2)} if s.room else None,
         "primary_guest_id": str(s.primary_guest_id),
-        "primary_guest": {"id": str(s.primary_guest.id), "full_name": s.primary_guest.full_name} if s.primary_guest else None,
+        "primary_guest": {
+            "id": str(s.primary_guest.id),
+            "full_name": s.primary_guest.full_name,
+            "phone": getattr(s.primary_guest, "phone", None),
+            "email": getattr(s.primary_guest, "email", None),
+            "notes": getattr(s.primary_guest, "notes", None),
+        } if s.primary_guest else None,
         "stay_type": s.stay_type.value if hasattr(s.stay_type, "value") else str(s.stay_type),
         "actual_check_in": s.actual_check_in.isoformat(),
         "expected_checkout": s.expected_checkout.isoformat(),
         "actual_checkout": s.actual_checkout.isoformat() if s.actual_checkout else None,
         "num_guests": s.num_guests,
         "is_completed": s.is_completed,
+        "notes": s.notes,
         "folio_id": str(s.folio.id) if s.folio else None,
         "folio": {
             "id": str(s.folio.id),
@@ -201,8 +220,35 @@ async def checkout(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.STAY_CHECKOUT)),
 ):
+    damage_list = [d.model_dump() for d in body.damage_items] if body.damage_items else None
     result = await stay_service.checkout(
-        db, stay_id, current_user.organization_id, current_user.user_id, body.discount
+        db,
+        stay_id,
+        current_user.organization_id,
+        current_user.user_id,
+        discount=body.discount,
+        notes=body.notes,
+        damage_items=damage_list,
     )
     await db.commit()
     return success(data=result, message="Checkout completed")
+
+
+@router.patch("/{stay_id}/extend", response_model=dict)
+async def extend_stay(
+    stay_id: uuid.UUID,
+    body: ExtendStayBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.STAY_CHECKIN)),
+):
+    """Extend stay duration with a new expected checkout datetime."""
+    stay = await stay_service.extend_stay(
+        db,
+        stay_id,
+        current_user.organization_id,
+        current_user.user_id,
+        new_expected_checkout=body.expected_checkout,
+        notes=body.notes,
+    )
+    await db.commit()
+    return success(data=_serialize_stay(stay), message="Stay extended successfully")

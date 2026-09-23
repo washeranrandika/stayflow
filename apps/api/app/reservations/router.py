@@ -100,6 +100,19 @@ async def get_reservation(
     return success(data=_serialize(res))
 
 
+@router.post("/{reservation_id}/confirm", response_model=dict)
+async def confirm_reservation(
+    reservation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.BOOKING_UPDATE)),
+):
+    res = await reservation_service.confirm(
+        db, reservation_id, current_user.organization_id, current_user.user_id
+    )
+    await db.commit()
+    return success(data=_serialize(res), message="Reservation confirmed")
+
+
 @router.post("/{reservation_id}/cancel", response_model=dict)
 async def cancel_reservation(
     reservation_id: uuid.UUID,

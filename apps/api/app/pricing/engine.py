@@ -128,15 +128,22 @@ def calculate_pricing(inp: PricingInput) -> PricingResult:
         ))
 
     elif inp.stay_type == "OVERNIGHT":
-        # One night
-        room_charge = _quantize(inp.base_nightly_rate)
+        # Calculate number of nights
+        delta_days = (inp.expected_checkout.date() - inp.actual_check_in.date()).days
+        if delta_days <= 0:
+            hours = _hours_between(inp.actual_check_in, inp.expected_checkout)
+            nights = max(1, math.ceil(hours / 24))
+        else:
+            nights = max(1, delta_days)
+
+        room_charge = _quantize(inp.base_nightly_rate * nights)
         breakdown.append(PricingBreakdownItem(
-            label="Nightly rate",
+            label=f"Nightly rate ({nights} night{'s' if nights != 1 else ''} × {inp.base_nightly_rate})",
             amount=room_charge,
         ))
 
     elif inp.stay_type == "DAILY":
-        # Number of calendar nights
+        # Number of calendar nights / days
         nights = max(1, (inp.expected_checkout.date() - inp.actual_check_in.date()).days)
         room_charge = _quantize(inp.base_daily_rate * nights)
         breakdown.append(PricingBreakdownItem(
@@ -162,19 +169,22 @@ def calculate_pricing(inp: PricingInput) -> PricingResult:
     # 3. Extra guests
     # -------------------------------------------------------
     extra_guests = max(0, inp.num_guests - inp.max_guests_included)
-    if extra_guests > 0 and inp.extra_guest_rate > 0:
+    # Effective extra guest rate: use configured rate or default to 25% of base rate
+    effective_extra_rate = inp.extra_guest_rate if inp.extra_guest_rate > 0 else _quantize((inp.base_nightly_rate if inp.base_nightly_rate > 0 else inp.base_hourly_rate * 4) * Decimal("0.25"))
+    if extra_guests > 0 and effective_extra_rate > 0:
         # For daily/overnight: per night; for hourly/day-use: flat
-        if inp.stay_type in ("DAILY",):
-            nights = max(1, (inp.expected_checkout.date() - inp.actual_check_in.date()).days)
-            extra_guest_charge = _quantize(inp.extra_guest_rate * extra_guests * nights)
+        if inp.stay_type in ("DAILY", "OVERNIGHT"):
+            delta_days = (inp.expected_checkout.date() - inp.actual_check_in.date()).days
+            nights = max(1, delta_days)
+            extra_guest_charge = _quantize(effective_extra_rate * extra_guests * nights)
             breakdown.append(PricingBreakdownItem(
-                label=f"Extra guests ({extra_guests} × {nights} nights × {inp.extra_guest_rate})",
+                label=f"Extra guests ({extra_guests} × {nights} night{'s' if nights != 1 else ''} × {effective_extra_rate})",
                 amount=extra_guest_charge,
             ))
         else:
-            extra_guest_charge = _quantize(inp.extra_guest_rate * extra_guests)
+            extra_guest_charge = _quantize(effective_extra_rate * extra_guests)
             breakdown.append(PricingBreakdownItem(
-                label=f"Extra guests ({extra_guests} × {inp.extra_guest_rate})",
+                label=f"Extra guests ({extra_guests} × {effective_extra_rate})",
                 amount=extra_guest_charge,
             ))
 

@@ -216,14 +216,17 @@ class StayService:
         org_id: uuid.UUID,
         user_id: uuid.UUID,
         discount: Decimal = Decimal("0"),
+        notes: Optional[str] = None,
+        damage_items: Optional[list] = None,
     ) -> dict:
         """
         Process checkout:
-        1. Calculate final pricing
-        2. Create/finalize invoice
-        3. Set room to CLEANING
-        4. Create housekeeping task
-        5. Mark stay as completed
+        1. Add any damage or extra items to folio
+        2. Calculate final pricing
+        3. Create/finalize invoice
+        4. Set room to CLEANING
+        5. Create housekeeping task
+        6. Mark stay as completed
         """
         stay = await self.get_by_id(db, stay_id, org_id)
 
@@ -231,6 +234,29 @@ class StayService:
             raise HTTPException(status_code=400, detail={"code": "STAY_COMPLETED", "message": "This stay is already checked out"})
 
         now = datetime.now(timezone.utc)
+        folio = stay.folio
+
+        # Add damage / extra charge items to folio if provided
+        if damage_items and folio:
+            from app.core.models import FolioItem
+            for item in damage_items:
+                amount = Decimal(str(item.get("amount", 0)))
+                if amount > 0:
+                    desc = item.get("description") or "Damage Fee"
+                    fi = FolioItem(
+                        folio_id=folio.id,
+                        category="DAMAGE",
+                        description=desc,
+                        quantity=Decimal("1"),
+                        unit_price=amount,
+                        total=amount,
+                        created_by=user_id,
+                        notes=item.get("notes"),
+                    )
+                    db.add(fi)
+            await db.flush()
+            # Refresh folio items in memory
+            await db.refresh(folio, ["items"])
 
         # Load room type for pricing
         result = await db.execute(
@@ -239,9 +265,8 @@ class StayService:
         room = result.scalar_one()
         rt = room.room_type
 
-        # Calculate services total
+        # Calculate services total (including newly added damage charges)
         services_total = Decimal("0")
-        folio = stay.folio
         if folio and folio.items:
             services_total = sum(item.total for item in folio.items if item.category != "ROOM")
 
@@ -300,15 +325,19 @@ class StayService:
         invoice.grand_total = pricing.grand_total
         invoice.is_finalized = True
         invoice.finalized_at = now
+        if notes:
+            invoice.notes = notes
 
         if folio:
             folio.is_finalized = True
             folio.finalized_at = now
 
-        # Mark stay complete
+        # Mark stay complete & save notes
         stay.is_completed = True
         stay.actual_checkout = now
         stay.checked_out_by = user_id
+        if notes:
+            stay.notes = (stay.notes + " | Checkout: " + notes) if stay.notes else f"Checkout: {notes}"
 
         # Set room to CLEANING
         old_room_status = room.status
@@ -342,7 +371,12 @@ class StayService:
 
         await audit_log(
             db, "stay.checkout", "stay", str(stay_id), org_id, user_id,
-            new_values={"grand_total": float(pricing.grand_total), "actual_checkout": now.isoformat()}
+            new_values={
+                "grand_total": float(pricing.grand_total),
+                "actual_checkout": now.isoformat(),
+                "notes": notes,
+                "damage_items_count": len(damage_items) if damage_items else 0,
+            }
         )
         await db.flush()
 
@@ -364,6 +398,36 @@ class StayService:
             "housekeeping_task_created": True,
             "room_status": room.status.value,
         }
+
+    async def extend_stay(
+        self,
+        db: AsyncSession,
+        stay_id: uuid.UUID,
+        org_id: uuid.UUID,
+        user_id: uuid.UUID,
+        new_expected_checkout: datetime,
+        notes: Optional[str] = None,
+    ) -> Stay:
+        """Extend stay duration with new expected checkout date/time."""
+        stay = await self.get_by_id(db, stay_id, org_id)
+        if stay.is_completed:
+            raise HTTPException(status_code=400, detail={"code": "STAY_COMPLETED", "message": "Cannot extend a completed stay"})
+
+        old_checkout = stay.expected_checkout
+        stay.expected_checkout = new_expected_checkout
+        if notes:
+            stay.notes = (stay.notes + " | Extension: " + notes) if stay.notes else f"Extension: {notes}"
+
+        await audit_log(
+            db, "stay.extend", "stay", str(stay.id), org_id, user_id,
+            new_values={
+                "old_expected_checkout": old_checkout.isoformat() if old_checkout else None,
+                "new_expected_checkout": new_expected_checkout.isoformat(),
+                "notes": notes,
+            }
+        )
+        await db.flush()
+        return stay
 
 
 # Import Invoice here to avoid circular imports

@@ -31,38 +31,59 @@ export const apiClient = api;
 api.interceptors.request.use(async (config) => {
   const token = memoryToken || (await SecureStore.getItemAsync(TOKEN_KEY));
   if (token) {
+    if (!memoryToken) memoryToken = token;
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+// Single in-flight refresh promise to prevent race condition when multiple requests 401 simultaneously
+let refreshPromise: Promise<string | null> | null = null;
+
+const doRefreshToken = async (): Promise<string | null> => {
+  const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
+  if (!refreshToken) {
+    setAuthToken(null);
+    return null;
+  }
+  try {
+    const res = await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refreshToken });
+    const { access_token, refresh_token: newRefresh } = res.data.data;
+    setAuthToken(access_token);
+    await SecureStore.setItemAsync(TOKEN_KEY, access_token);
+    await SecureStore.setItemAsync(REFRESH_KEY, newRefresh);
+    return access_token;
+  } catch (err) {
+    setAuthToken(null);
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_KEY);
+    return null;
+  } finally {
+    refreshPromise = null;
+  }
+};
 
 // Auto-refresh on 401 & clear stale auth on 403 tenant mismatch
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true;
-      const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
-      if (refreshToken) {
-        try {
-          const res = await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refreshToken });
-          const { access_token, refresh_token: newRefresh } = res.data.data;
-          await SecureStore.setItemAsync(TOKEN_KEY, access_token);
-          await SecureStore.setItemAsync(REFRESH_KEY, newRefresh);
-          original.headers.Authorization = `Bearer ${access_token}`;
-          return api(original);
-        } catch {
-          await SecureStore.deleteItemAsync(TOKEN_KEY);
-          await SecureStore.deleteItemAsync(REFRESH_KEY);
-        }
+      if (!refreshPromise) {
+        refreshPromise = doRefreshToken();
+      }
+      const newAccessToken = await refreshPromise;
+      if (newAccessToken) {
+        original.headers.Authorization = `Bearer ${newAccessToken}`;
+        return api(original);
       }
     } else if (
       error.response?.status === 403 &&
       (error.response?.data?.detail === "Not a member of this organization" ||
        error.response?.data?.detail === "Organization not found or inactive")
     ) {
-      // Invalidate stale tokens from re-seeded database
+      setAuthToken(null);
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       await SecureStore.deleteItemAsync(REFRESH_KEY);
     }

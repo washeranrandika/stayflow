@@ -27,6 +27,21 @@ def _generate_reservation_number() -> str:
     return f"SF-{datetime.now().strftime('%Y%m%d')}-{suffix}"
 
 
+def _normalize_time(t: Optional[str]) -> Optional[str]:
+    """Ensure time strings fit within 5-character VARCHAR(5) like '14:00'."""
+    if not t:
+        return None
+    t = t.strip()
+    if len(t) <= 5 and "AM" not in t.upper() and "PM" not in t.upper():
+        return t
+    for fmt_str in ("%I:%M %p", "%I:%M%p", "%H:%M:%S", "%H:%M"):
+        try:
+            return datetime.strptime(t, fmt_str).strftime("%H:%M")
+        except ValueError:
+            continue
+    return t[:5]
+
+
 class ReservationService:
 
     async def _verify_room_org(self, db: AsyncSession, room_id: uuid.UUID, org_id: uuid.UUID) -> Room:
@@ -135,11 +150,11 @@ class ReservationService:
             data["expected_checkout_date"],
         )
 
-        # Verify room is not occupied
-        if room.status == RoomStatusEnum.OCCUPIED:
+        # Verify room is not occupied today if check_in_date is today
+        if data["check_in_date"] == date.today() and room.status == RoomStatusEnum.OCCUPIED:
             raise HTTPException(
                 status_code=400,
-                detail={"code": "ROOM_OCCUPIED", "message": f"Room {room.room_number} is currently occupied"},
+                detail={"code": "ROOM_OCCUPIED", "message": f"Room {room.room_number} is currently occupied today. Please checkout the current guest first or choose another room."},
             )
 
         # Verify guest belongs to org
@@ -148,6 +163,12 @@ class ReservationService:
         )
         if not result.scalar_one_or_none():
             raise TenantViolationError()
+
+        # Sanitize time formats to fit VARCHAR(5)
+        if "check_in_time" in data:
+            data["check_in_time"] = _normalize_time(data["check_in_time"])
+        if "expected_checkout_time" in data:
+            data["expected_checkout_time"] = _normalize_time(data["expected_checkout_time"])
 
         # Create reservation
         reservation = Reservation(
@@ -200,6 +221,27 @@ class ReservationService:
         await audit_log(
             db, "reservation.cancel", "reservation", str(reservation_id), org_id, user_id,
             old_values={"status": old_status.value}, new_values={"status": "CANCELLED", "reason": reason}
+        )
+        return res
+
+    async def confirm(
+        self,
+        db: AsyncSession,
+        reservation_id: uuid.UUID,
+        org_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> Reservation:
+        res = await self.get_by_id(db, reservation_id, org_id)
+        if res.status != ReservationStatusEnum.PENDING:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "CANNOT_CONFIRM", "message": f"Reservation is already {res.status.value}"},
+            )
+        old_status = res.status
+        res.status = ReservationStatusEnum.CONFIRMED
+        await audit_log(
+            db, "reservation.confirm", "reservation", str(reservation_id), org_id, user_id,
+            old_values={"status": old_status.value}, new_values={"status": "CONFIRMED"}
         )
         return res
 
