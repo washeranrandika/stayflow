@@ -8,12 +8,13 @@
 import React, { useState } from "react";
 import {
   View, Text, FlatList, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Modal, ScrollView, Alert
+  TouchableOpacity, ActivityIndicator, Modal, ScrollView, Alert, Platform
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/store/auth";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Users, AirVent, LogIn, LogOut, Brush, Info, X } from "lucide-react-native";
 
 const STATUS_MAP: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -30,6 +31,7 @@ const FILTERS = ["ALL", "AVAILABLE", "OCCUPIED", "CLEANING", "RESERVED", "MAINTE
 
 export default function RoomsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>("ALL");
@@ -122,21 +124,35 @@ export default function RoomsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Top Header */}
+      <View style={[styles.topBar]}>
+        <View>
+          <Text style={styles.topBarTitle}>Rooms & Inventory</Text>
+          <Text style={styles.topBarSub}>{rooms.length} total rooms registered</Text>
+        </View>
+      </View>
+
       {/* Filter bar */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        style={styles.filterBar} contentContainerStyle={styles.filterContent}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.chip, filter === f && styles.chipActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
-              {f === "ALL" ? `All (${rooms.length})` : `${f.replace(/_/g, " ")} (${counts[f] || 0})`}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.filterBarContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterBar}
+          contentContainerStyle={styles.filterContent}
+        >
+          {FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.chip, filter === f && styles.chipActive]}
+              onPress={() => setFilter(f)}
+            >
+              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
+                {f === "ALL" ? `All (${rooms.length})` : `${f.replace(/_/g, " ")} (${counts[f] || 0})`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {isLoading ? (
         <View style={styles.center}>
@@ -299,13 +315,36 @@ export default function RoomsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  filterBar: { backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e2e8f0", maxHeight: 52 },
-  filterContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: "#f1f5f9" },
-  chipActive: { backgroundColor: "#2563eb" },
-  chipText: { fontSize: 12, fontWeight: "600", color: "#64748b" },
+  topBar: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  topBarTitle: { fontSize: 19, fontWeight: "900", color: "#0f172a", letterSpacing: -0.3 },
+  topBarSub: { fontSize: 11, color: "#64748b", marginTop: 2, fontWeight: "600" },
+  filterBarContainer: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  filterBar: { flexGrow: 0 },
+  filterContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, alignItems: "center" },
+  chip: {
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexShrink: 0,
+  },
+  chipActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  chipText: { fontSize: 12, fontWeight: "700", color: "#64748b" },
   chipTextActive: { color: "#fff" },
-  list: { padding: 12, gap: 10 },
+  list: { padding: 12, paddingBottom: 40, gap: 10 },
   row: { gap: 10 },
   roomCard: {
     flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 14,

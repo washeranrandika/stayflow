@@ -5,11 +5,12 @@
 import React, { useState } from "react";
 import {
   View, Text, FlatList, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Modal, ScrollView, Alert
+  TouchableOpacity, ActivityIndicator, Modal, ScrollView, Alert, Platform
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Calendar as CalendarIcon, User as UserIcon, BedDouble, X,
   LogIn, LogOut, Clock, ShieldCheck, ChevronRight, RefreshCw,
@@ -54,6 +55,7 @@ function fmtTime(iso?: any) {
 
 export default function BookingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<any>(null);
   const [filter, setFilter] = useState("ALL");
@@ -279,32 +281,34 @@ export default function BookingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        contentContainerStyle={styles.filterContent}
-      >
-        {[
-          { key: "ALL", label: `All (${combinedItems.length})` },
-          { key: "CHECKED_IN", label: `Checked In (${activeStays.length})` },
-          { key: "CONFIRMED", label: "Confirmed" },
-          { key: "PENDING", label: "Pending" },
-          { key: "COMPLETED", label: "Completed" },
-          { key: "CANCELLED", label: "Cancelled" },
-        ].map((item) => (
-          <TouchableOpacity
-            key={item.key}
-            style={[styles.chip, filter === item.key && styles.chipActive]}
-            onPress={() => setFilter(item.key)}
-          >
-            <Text style={[styles.chipText, filter === item.key && styles.chipTextActive]}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Filter chips category bar */}
+      <View style={styles.filterBarContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterBar}
+          contentContainerStyle={styles.filterContent}
+        >
+          {[
+            { key: "ALL", label: `All (${combinedItems.length})` },
+            { key: "CHECKED_IN", label: `Checked In (${activeStays.length})` },
+            { key: "CONFIRMED", label: "Confirmed" },
+            { key: "PENDING", label: "Pending" },
+            { key: "COMPLETED", label: "Completed" },
+            { key: "CANCELLED", label: "Cancelled" },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.chip, filter === item.key && styles.chipActive]}
+              onPress={() => setFilter(item.key)}
+            >
+              <Text style={[styles.chipText, filter === item.key && styles.chipTextActive]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {isLoading && !isRefetching ? (
         <View style={styles.center}>
@@ -491,13 +495,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 10,
+    paddingBottom: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
-  topBarTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
-  topBarSub: { fontSize: 12, color: "#64748b", marginTop: 1 },
+  topBarTitle: { fontSize: 19, fontWeight: "900", color: "#0f172a", letterSpacing: -0.3 },
+  topBarSub: { fontSize: 11, color: "#64748b", marginTop: 2, fontWeight: "600" },
   newResBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -512,14 +516,43 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  newResBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  filterBar: { backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e2e8f0", maxHeight: 52 },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: "#f1f5f9" },
-  chipActive: { backgroundColor: "#2563eb" },
-  chipText: { fontSize: 13, fontWeight: "600", color: "#64748b" },
-  chipTextActive: { color: "#fff" },
-  list: { padding: 16, gap: 12 },
+  newResBtnText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  filterBarContainer: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  filterBar: {
+    flexGrow: 0,
+  },
+  filterContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    alignItems: "center",
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexShrink: 0,
+  },
+  chipActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  chipTextActive: {
+    color: "#ffffff",
+  },
+  list: { padding: 16, paddingBottom: 40, gap: 12 },
   card: {
     backgroundColor: "#fff", borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: "#e2e8f0",
