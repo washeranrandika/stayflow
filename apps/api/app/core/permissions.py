@@ -124,6 +124,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
 
     "RECEPTIONIST": [
+        Permission.PROPERTY_VIEW,
         Permission.ROOM_VIEW,
         Permission.ROOM_STATUS_UPDATE,
         Permission.ROOM_TYPE_VIEW,
@@ -142,11 +143,13 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permission.INVOICE_CREATE,
         Permission.PAYMENT_VIEW,
         Permission.PAYMENT_CREATE,
+        Permission.REPORT_VIEW,
         Permission.HOUSEKEEPING_VIEW,
         Permission.SERVICE_VIEW,
         Permission.SERVICE_CREATE,
     ],
     "HOUSEKEEPER": [
+        Permission.PROPERTY_VIEW,
         Permission.ROOM_VIEW,
         Permission.ROOM_STATUS_UPDATE,
         Permission.HOUSEKEEPING_VIEW,

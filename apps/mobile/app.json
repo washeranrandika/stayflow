@@ -5,14 +5,19 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.stayflow.app"
     },
     "android": {
       "package": "com.stayflow.app",
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -25,11 +30,12 @@
         {
           "cameraPermission": "StayFlow needs camera access for ID document scanning."
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "scheme": "stayflow",
     "extra": {
-      "apiUrl": "http://localhost:8000/api/v1"
+      "apiUrl": "http://192.168.1.4:8000/api/v1"
     }
   }
 }

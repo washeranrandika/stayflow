@@ -19,6 +19,16 @@ from app.stays.service import stay_service
 router = APIRouter()
 
 
+class PricingEstimateBody(BaseModel):
+    """Pre-check-in pricing estimate — no stay is created."""
+    property_id: uuid.UUID
+    room_id: uuid.UUID
+    stay_type: str
+    expected_checkout: datetime
+    num_guests: int = 1
+
+
+
 class CheckInBody(BaseModel):
     reservation_id: Optional[uuid.UUID] = None
     property_id: uuid.UUID
@@ -96,7 +106,70 @@ async def check_in(
 ):
     stay = await stay_service.check_in(db, current_user.organization_id, current_user.user_id, body.model_dump())
     await db.commit()
-    return success(data=_serialize_stay(stay), message="Check-in successful")
+    loaded_stay = await stay_service.get_by_id(db, stay.id, current_user.organization_id)
+    return success(data=_serialize_stay(loaded_stay), message="Check-in successful")
+
+
+@router.post("/pricing-estimate", response_model=dict)
+async def pricing_estimate(
+    body: PricingEstimateBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.STAY_VIEW)),
+):
+    """Return a pricing estimate for a prospective stay (no records created)."""
+    from app.core.models import Room, RoomType, Property
+    from app.pricing.engine import PricingInput, calculate_pricing
+    from decimal import Decimal
+    from datetime import datetime, timezone
+
+    # Load room → room_type (with tenant check)
+    result = await db.execute(
+        select(Room)
+        .join(Property, Room.property_id == Property.id)
+        .options(selectinload(Room.room_type))
+        .where(Room.id == body.room_id, Property.organization_id == current_user.organization_id)
+    )
+    room = result.scalar_one_or_none()
+    if not room or not room.room_type:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    rt = room.room_type
+    now = datetime.now(timezone.utc)
+
+    pricing_input = PricingInput(
+        stay_type=body.stay_type,
+        actual_check_in=now,
+        expected_checkout=body.expected_checkout,
+        actual_checkout=body.expected_checkout,  # estimate: no overtime
+        num_guests=body.num_guests,
+        max_guests_included=rt.max_guests or 2,
+        base_hourly_rate=Decimal(str(rt.base_hourly_rate or 0)),
+        base_day_use_rate=Decimal(str(rt.base_day_use_rate or 0)),
+        base_nightly_rate=Decimal(str(rt.base_nightly_rate or 0)),
+        base_daily_rate=Decimal(str(rt.base_daily_rate or 0)),
+        extra_hour_rate=Decimal(str(rt.extra_hour_rate or 0)),
+        extra_guest_rate=Decimal(str(rt.extra_guest_rate or 0)),
+        tax_rate=Decimal("0"),
+        service_charge_rate=Decimal("0"),
+    )
+
+    r = calculate_pricing(pricing_input)
+    return success(data={
+        "room_charge": float(r.room_charge),
+        "extra_hour_charge": float(r.extra_hour_charge),
+        "extra_guest_charge": float(r.extra_guest_charge),
+        "services_total": float(r.services_total),
+        "service_charge": float(r.service_charge),
+        "discount": float(r.discount),
+        "tax_amount": float(r.tax),
+        "subtotal": float(r.subtotal),
+        "grand_total": float(r.grand_total),
+        "breakdown": [
+            {"label": b.label, "amount": float(b.amount), "is_deduction": b.is_deduction}
+            for b in r.breakdown
+        ],
+    })
 
 
 @router.get("/{stay_id}", response_model=dict)

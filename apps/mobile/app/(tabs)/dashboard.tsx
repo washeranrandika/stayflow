@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
-import { CheckCircle, Users, Clock, Wrench, TrendingUp, ChevronRight, Plus } from "lucide-react-native";
+import { CheckCircle, Users, Clock, Wrench, TrendingUp, ChevronRight, Plus, LogOut, UserPlus } from "lucide-react-native";
 
 const ROOM_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   AVAILABLE:    { bg: "#f0fdf4", text: "#15803d", label: "Available" },
@@ -20,12 +20,27 @@ const ROOM_STATUS_COLORS: Record<string, { bg: string; text: string; label: stri
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api.get("/reports/dashboard"),
     refetchInterval: 60_000,
   });
+
+  const getErrorMessage = (err: any) => {
+    if (!err) return null;
+    const detail = err.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (detail?.message) return detail.message;
+    if (err.message) return err.message;
+    return "Failed to load dashboard data.";
+  };
+
+  const handleForceLogout = async () => {
+    await logout();
+    router.replace("/login");
+  };
 
   const stats = data?.data?.data;
   const roomStatus = stats?.room_status || {};
@@ -37,14 +52,76 @@ export default function DashboardScreen() {
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
     >
       {/* Greeting */}
-      <View style={styles.greeting}>
-        <Text style={styles.greetingText}>
-          Good {getTimeOfDay()}, {user?.full_name?.split(" ")[0] || "there"} 👋
-        </Text>
-        <Text style={styles.dateText}>
-          {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "short" })}
-        </Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+        <View style={styles.greeting}>
+          <Text style={styles.greetingText}>
+            Good {getTimeOfDay()}, {user?.full_name?.split(" ")[0] || "there"} 👋
+          </Text>
+          <Text style={styles.dateText}>
+            {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "short" })}
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={handleForceLogout}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 8,
+            backgroundColor: "#fee2e2",
+            gap: 4,
+          }}
+        >
+          <LogOut size={14} color="#ef4444" />
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#ef4444" }}>Sign Out</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Error Banner */}
+      {isError && (
+        <View style={{
+          backgroundColor: "#fef2f2",
+          borderColor: "#fecaca",
+          borderWidth: 1,
+          borderRadius: 12,
+          padding: 14,
+          marginBottom: 16,
+        }}>
+          <Text style={{ color: "#991b1b", fontWeight: "700", fontSize: 14, marginBottom: 4 }}>
+            ⚠️ Error Loading Dashboard
+          </Text>
+          <Text style={{ color: "#b91c1c", fontSize: 13, marginBottom: 10 }}>
+            {getErrorMessage(error)}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => refetch()}
+              style={{
+                backgroundColor: "#ef4444",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 6,
+              }}
+            >
+              <Text style={{ color: "#ffffff", fontWeight: "600", fontSize: 12 }}>Tap to Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleForceLogout}
+              style={{
+                backgroundColor: "#ffffff",
+                borderWidth: 1,
+                borderColor: "#fecaca",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 6,
+              }}
+            >
+              <Text style={{ color: "#b91c1c", fontWeight: "600", fontSize: 12 }}>Re-login</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Room Status Cards */}
       <Text style={styles.sectionTitle}>Room Status</Text>
@@ -97,10 +174,10 @@ export default function DashboardScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: "#0f172a" }]}
-          onPress={() => router.push("/(tabs)/bookings")}
+          onPress={() => router.push("/checkout")}
         >
-          <CheckCircle size={20} color="#fff" />
-          <Text style={[styles.actionLabel, { color: "#fff" }]}>Bookings</Text>
+          <LogOut size={20} color="#fff" />
+          <Text style={[styles.actionLabel, { color: "#fff" }]}>Checkout</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: "#b45309", opacity: 0.9 }]}
@@ -115,6 +192,13 @@ export default function DashboardScreen() {
         >
           <Users size={20} color="#fff" />
           <Text style={[styles.actionLabel, { color: "#fff" }]}>Guests</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: "#7c3aed" }]}
+          onPress={() => router.push("/new-guest" as any)}
+        >
+          <UserPlus size={20} color="#fff" />
+          <Text style={[styles.actionLabel, { color: "#fff" }]}>New Guest</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

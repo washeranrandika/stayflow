@@ -1,5 +1,4 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from "react-native";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "expo-router";
 import { Building2, LogOut, FileText, User, Settings as SettingsIcon } from "lucide-react-native";
@@ -10,6 +9,13 @@ export default function MoreScreen() {
   const router = useRouter();
 
   const handleLogout = async () => {
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Are you sure you want to sign out?")) {
+        await logout();
+        router.replace("/login");
+      }
+      return;
+    }
     Alert.alert(
       "Sign Out",
       "Are you sure you want to sign out?",

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -69,15 +70,22 @@ export function Sidebar({ userName, orgName }: { userName: string; orgName: stri
       {/* Logo */}
       <div className="flex items-center justify-between px-4 h-16 border-b border-slate-700">
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold leading-none">StayFlow</p>
-              <p className="text-xs text-slate-400 truncate max-w-[140px]">{orgName}</p>
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/brand-icon.jpg"
+              alt="StayFlow"
+              width={32}
+              height={32}
+              className="rounded-lg flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-bold leading-none text-white">StayFlow</p>
+              <p className="text-xs text-slate-400 truncate max-w-[130px] mt-0.5">{orgName}</p>
             </div>
           </div>
+        )}
+        {collapsed && (
+          <Image src="/brand-icon.jpg" alt="SF" width={28} height={28} className="rounded-lg" />
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}

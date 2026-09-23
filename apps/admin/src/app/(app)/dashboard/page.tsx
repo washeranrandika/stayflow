@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { reportsApi } from "@/lib/api";
 import { BedDouble, Users, Wrench, TrendingUp, ArrowUpRight, Clock, CheckCircle, AlertCircle } from "lucide-react";
@@ -121,30 +122,30 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 mb-6">
         <h2 className="text-base font-semibold text-slate-800 mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <a
-            href="/stays/check-in"
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          <Link
+            href="/check-in"
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors inline-block"
           >
             + New Check-in
-          </a>
-          <a
-            href="/bookings/new"
-            className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors"
+          </Link>
+          <Link
+            href="/bookings"
+            className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors inline-block"
           >
-            + New Booking
-          </a>
-          <a
-            href="/guests/new"
-            className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+            Manage Bookings
+          </Link>
+          <Link
+            href="/guests"
+            className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors inline-block"
           >
-            + New Guest
-          </a>
-          <a
+            Guests Directory
+          </Link>
+          <Link
             href="/housekeeping"
-            className="px-4 py-2 border border-amber-200 text-amber-700 bg-amber-50 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors"
+            className="px-4 py-2 border border-amber-200 text-amber-700 bg-amber-50 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors inline-block"
           >
             Housekeeping
-          </a>
+          </Link>
         </div>
       </div>
 

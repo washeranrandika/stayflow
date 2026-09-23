@@ -87,6 +87,7 @@ def create_application() -> FastAPI:
     app.include_router(guests_router, prefix=f"{prefix}/guests", tags=["Guests"])
     app.include_router(identity_router, prefix=f"{prefix}/identity", tags=["Identity"])
     app.include_router(reservations_router, prefix=f"{prefix}/bookings", tags=["Reservations"])
+    app.include_router(reservations_router, prefix=f"{prefix}/reservations", tags=["Reservations"])
     app.include_router(stays_router, prefix=f"{prefix}/stays", tags=["Stays"])
     app.include_router(billing_router, prefix=f"{prefix}/billing", tags=["Billing"])
     app.include_router(payments_router, prefix=f"{prefix}/payments", tags=["Payments"])

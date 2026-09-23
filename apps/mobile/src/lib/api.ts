@@ -16,16 +16,27 @@ export const api: AxiosInstance = axios.create({
 export const TOKEN_KEY = "sf_access_token";
 export const REFRESH_KEY = "sf_refresh_token";
 
+let memoryToken: string | null = null;
+
+export const setAuthToken = (token: string | null) => {
+  memoryToken = token;
+};
+
+export const getAuthToken = () => memoryToken;
+
+/** Alias used by some screens — same instance as `api`. */
+export const apiClient = api;
+
 // Attach token to every request
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = memoryToken || (await SecureStore.getItemAsync(TOKEN_KEY));
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Auto-refresh on 401
+// Auto-refresh on 401 & clear stale auth on 403 tenant mismatch
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -44,9 +55,16 @@ api.interceptors.response.use(
         } catch {
           await SecureStore.deleteItemAsync(TOKEN_KEY);
           await SecureStore.deleteItemAsync(REFRESH_KEY);
-          // Navigate to login - handled by auth store
         }
       }
+    } else if (
+      error.response?.status === 403 &&
+      (error.response?.data?.detail === "Not a member of this organization" ||
+       error.response?.data?.detail === "Organization not found or inactive")
+    ) {
+      // Invalidate stale tokens from re-seeded database
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await SecureStore.deleteItemAsync(REFRESH_KEY);
     }
     return Promise.reject(error);
   }
