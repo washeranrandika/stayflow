@@ -11,6 +11,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (data: { full_name: string; email: string; password: string; hotel_name?: string; phone?: string }) => Promise<void>;
   logout: () => Promise<void>;
   initialize: () => Promise<void>;
 }
@@ -46,6 +47,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStore.setItemAsync(REFRESH_KEY, tokens.refresh_token);
 
     // Fetch full profile (includes role, permissions, and organization details)
+    try {
+      const meRes = await api.get("/users/me", {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      set({ user: meRes.data.data, isAuthenticated: true });
+    } catch {
+      set({ user, isAuthenticated: true });
+    }
+  },
+
+  register: async (registerData) => {
+    const res = await api.post("/auth/register", registerData);
+    const { tokens, user } = res.data.data;
+    setAuthToken(tokens.access_token);
+    await SecureStore.setItemAsync(TOKEN_KEY, tokens.access_token);
+    await SecureStore.setItemAsync(REFRESH_KEY, tokens.refresh_token);
+
     try {
       const meRes = await api.get("/users/me", {
         headers: { Authorization: `Bearer ${tokens.access_token}` },

@@ -9,8 +9,9 @@ from fastapi import HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 
-from app.core.models import User, RefreshToken, OrganizationMember, Organization
+from app.core.models import User, RefreshToken, OrganizationMember, Organization, UserRoleEnum, Property
 from app.core.security import (
+    hash_password,
     verify_password,
     create_access_token,
     create_refresh_token,
@@ -186,6 +187,115 @@ class AuthService:
         if token_obj:
             token_obj.is_revoked = True
             await db.commit()
+
+    async def register(
+        self,
+        db: AsyncSession,
+        full_name: str,
+        email: str,
+        password: str,
+        hotel_name: Optional[str] = None,
+        phone: Optional[str] = None,
+        request: Optional[Request] = None,
+    ) -> LoginResponse:
+        import re
+        email = email.lower().strip()
+
+        # Check if user already exists
+        result = await db.execute(select(User).where(User.email == email))
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "EMAIL_EXISTS", "message": "An account with this email already exists"},
+            )
+
+        # Generate org name & slug
+        org_name = hotel_name.strip() if hotel_name and hotel_name.strip() else f"{full_name.strip()}'s Property"
+        slug_base = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "property"
+        unique_slug = f"{slug_base}-{uuid.uuid4().hex[:6]}"
+
+        # Create Organization
+        organization = Organization(
+            name=org_name,
+            slug=unique_slug,
+            email=email,
+            phone=phone,
+            currency="LKR",
+        )
+        db.add(organization)
+        await db.flush()
+
+        # Create User
+        user = User(
+            email=email,
+            hashed_password=hash_password(password),
+            full_name=full_name.strip(),
+            phone=phone,
+            is_active=True,
+            last_login_at=datetime.now(timezone.utc),
+        )
+        db.add(user)
+        await db.flush()
+
+        # Create OrganizationMember (Role: OWNER)
+        member = OrganizationMember(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=UserRoleEnum.OWNER,
+            is_active=True,
+        )
+        db.add(member)
+
+        # Create Default Property
+        property_obj = Property(
+            organization_id=organization.id,
+            name=f"{org_name} Main",
+            address="Main Street",
+            city="Colombo",
+            country="Sri Lanka",
+            check_in_time="14:00",
+            check_out_time="11:00",
+            is_active=True,
+        )
+        db.add(property_obj)
+        await db.flush()
+
+        # Generate Tokens
+        access_token = create_access_token({
+            "sub": str(user.id),
+            "org_id": str(organization.id),
+            "role": UserRoleEnum.OWNER.value,
+        })
+        raw_refresh, hashed_refresh = create_refresh_token()
+
+        refresh_token_obj = RefreshToken(
+            user_id=user.id,
+            token_hash=hashed_refresh,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            ip_address=getattr(request.state, "ip_address", None) if request else None,
+            user_agent=getattr(request.state, "user_agent", None) if request else None,
+        )
+        db.add(refresh_token_obj)
+
+        await audit_log(
+            db=db,
+            action="auth.register",
+            entity_type="user",
+            entity_id=str(user.id),
+            organization_id=organization.id,
+            user_id=user.id,
+        )
+
+        await db.commit()
+
+        return LoginResponse(
+            tokens=TokenResponse(
+                access_token=access_token,
+                refresh_token=raw_refresh,
+                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            ),
+            user=UserResponse.model_validate(user),
+        )
 
 
 auth_service = AuthService()

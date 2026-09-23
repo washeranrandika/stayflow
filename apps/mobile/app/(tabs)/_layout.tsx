@@ -1,8 +1,13 @@
+import React from "react";
 import { Tabs } from "expo-router";
 import { LayoutDashboard, BedDouble, Calendar, Users, MoreHorizontal } from "lucide-react-native";
-import { useColorScheme } from "react-native";
+import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === "ios" ? 24 : 12);
+
   return (
     <Tabs
       screenOptions={{
@@ -12,13 +17,22 @@ export default function TabsLayout() {
           backgroundColor: "#fff",
           borderTopWidth: 1,
           borderTopColor: "#e2e8f0",
-          paddingBottom: 4,
+          paddingBottom: bottomPadding,
           paddingTop: 4,
-          height: 60,
+          height: 36 + bottomPadding,
+          elevation: 8,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: "600",
+          fontWeight: "700",
+          marginTop: 2,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
         },
         headerStyle: {
           backgroundColor: "#0f172a",
@@ -32,9 +46,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: "Dashboard",
+          title: "Home",
           tabBarIcon: ({ color, size }) => <LayoutDashboard size={size} color={color} />,
-          headerTitle: "StayFlow",
+          headerShown: false,
         }}
       />
       <Tabs.Screen

@@ -4,11 +4,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.auth.schemas import LoginRequest, LoginResponse, TokenResponse, RefreshRequest
+from app.auth.schemas import LoginRequest, LoginResponse, RegisterRequest, TokenResponse, RefreshRequest
 from app.auth.service import auth_service
 from app.core.responses import success
 
 router = APIRouter()
+
+
+@router.post("/register", response_model=dict)
+@limiter.limit("5/minute")
+async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Register a new organization and owner account."""
+    result = await auth_service.register(
+        db,
+        full_name=body.full_name,
+        email=body.email,
+        password=body.password,
+        hotel_name=body.hotel_name,
+        phone=body.phone,
+        request=request,
+    )
+    return success(data=result.model_dump(), message="Registration successful")
 
 
 @router.post("/login", response_model=dict)
