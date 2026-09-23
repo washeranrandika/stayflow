@@ -1,0 +1,120 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stayflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-stayflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stayflow_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-stayflow}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stayflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: stayflow_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-stayflow_redis_password}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-stayflow_redis_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: stayflow_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-stayflow_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-stayflow_minio_password}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # MinIO bucket initialization
+  minio_init:
+    image: minio/mc:latest
+    container_name: stayflow_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set stayflow http://minio:9000 ${MINIO_ROOT_USER:-stayflow_minio} ${MINIO_ROOT_PASSWORD:-stayflow_minio_password};
+      /usr/bin/mc mb stayflow/stayflow-documents --ignore-existing;
+      /usr/bin/mc mb stayflow/stayflow-photos --ignore-existing;
+      /usr/bin/mc policy set private stayflow/stayflow-documents;
+      /usr/bin/mc policy set private stayflow/stayflow-photos;
+      echo 'MinIO buckets created.';
+      "
+
+  # Celery worker for background jobs
+  celery_worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: stayflow_celery_worker
+    restart: unless-stopped
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-stayflow}:${POSTGRES_PASSWORD:-stayflow_dev_password}@postgres:5432/${POSTGRES_DB:-stayflow}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-stayflow_redis_password}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-stayflow_redis_password}@redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+    profiles: ["full"]
+
+  # Celery beat scheduler
+  celery_beat:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: stayflow_celery_beat
+    restart: unless-stopped
+    command: celery -A app.core.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-stayflow}:${POSTGRES_PASSWORD:-stayflow_dev_password}@postgres:5432/${POSTGRES_DB:-stayflow}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-stayflow_redis_password}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-stayflow_redis_password}@redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["full"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  default:
+    name: stayflow_network

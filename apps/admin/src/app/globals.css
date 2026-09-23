@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+
+    /* StayFlow brand colors */
+    --sf-navy: 222 47% 13%;
+    --sf-blue: 213 94% 44%;
+    --sf-teal: 174 72% 38%;
+    --sf-amber: 38 92% 50%;
+    --sf-rose: 347 83% 55%;
+    --sf-emerald: 160 84% 39%;
+    --sf-slate: 215 28% 17%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Room status badges */
+.status-available {
+  @apply bg-emerald-50 text-emerald-700 border border-emerald-200;
+}
+.status-occupied {
+  @apply bg-red-50 text-red-700 border border-red-200;
+}
+.status-reserved {
+  @apply bg-blue-50 text-blue-700 border border-blue-200;
+}
+.status-cleaning {
+  @apply bg-amber-50 text-amber-700 border border-amber-200;
+}
+.status-maintenance {
+  @apply bg-orange-50 text-orange-700 border border-orange-200;
+}
+.status-out_of_service {
+  @apply bg-gray-50 text-gray-600 border border-gray-200;
+}
+
+/* Sidebar */
+.sidebar-link {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors;
+}
+.sidebar-link.active {
+  @apply bg-slate-700 text-white;
+}
+
+/* Card hover effect */
+.card-hover {
+  @apply transition-shadow hover:shadow-md;
+}
