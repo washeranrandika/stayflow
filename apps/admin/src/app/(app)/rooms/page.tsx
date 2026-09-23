@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { propertiesApi, roomsApi } from "@/lib/api";
-import { Users, AirVent, Loader2 } from "lucide-react";
+import { Users, AirVent, Loader2, BedDouble } from "lucide-react";
 import clsx from "clsx";
 
 function RoomStatusBadge({ status }: { status: string }) {

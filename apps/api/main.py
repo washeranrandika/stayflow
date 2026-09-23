@@ -28,6 +28,7 @@ from app.housekeeping.router import router as housekeeping_router
 from app.notifications.router import router as notifications_router
 from app.reports.router import router as reports_router
 from app.audit.router import router as audit_router
+from app.subscriptions.router import router as subscriptions_router
 
 logger = structlog.get_logger()
 
@@ -94,6 +95,7 @@ def create_application() -> FastAPI:
     app.include_router(notifications_router, prefix=f"{prefix}/notifications", tags=["Notifications"])
     app.include_router(reports_router, prefix=f"{prefix}/reports", tags=["Reports"])
     app.include_router(audit_router, prefix=f"{prefix}/audit", tags=["Audit"])
+    app.include_router(subscriptions_router, prefix=f"{prefix}/subscriptions", tags=["Subscriptions"])
 
     @app.get(f"{prefix}/health", tags=["Health"])
     async def health_check():

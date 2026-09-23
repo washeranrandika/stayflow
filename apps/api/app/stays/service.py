@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.models import (
-    Stay, Room, Reservation, Folio, Invoice, HousekeepingTask, RoomStatusHistory,
+    Stay, Room, Reservation, Folio, Invoice, Payment, HousekeepingTask, RoomStatusHistory,
     RoomStatusEnum, ReservationStatusEnum, HousekeepingStatusEnum, HousekeepingPriorityEnum,
     Property, Guest,
 )
@@ -141,6 +141,7 @@ class StayService:
         # Queue checkout reminders (background job)
         await notification_service.schedule_checkout_reminders(stay.id, stay.expected_checkout, org_id)
 
+        await db.flush()
         return stay
 
     async def get_by_id(self, db: AsyncSession, stay_id: uuid.UUID, org_id: uuid.UUID) -> Stay:
@@ -148,9 +149,10 @@ class StayService:
             select(Stay)
             .join(Property, Stay.property_id == Property.id)
             .options(
-                selectinload(Stay.room),
+                selectinload(Stay.room).selectinload(Room.room_type),
                 selectinload(Stay.primary_guest),
-                selectinload(Stay.folio),
+                selectinload(Stay.folio).selectinload(Folio.items),
+                selectinload(Stay.folio).selectinload(Folio.invoice).selectinload(Invoice.payments).selectinload(Payment.refunds),
                 selectinload(Stay.service_orders),
             )
             .where(Stay.id == stay_id, Property.organization_id == org_id)
@@ -162,15 +164,13 @@ class StayService:
 
     async def get_pricing_estimate(self, db: AsyncSession, stay: Stay) -> dict:
         """Calculate current pricing for a stay (for display during checkout)."""
-        room = stay.room
-        rt = room.room_type if room else None
-        if not rt:
-            # Load room type
-            result = await db.execute(
-                select(Room).options(selectinload(Room.room_type)).where(Room.id == stay.room_id)
-            )
-            room = result.scalar_one()
-            rt = room.room_type
+        result = await db.execute(
+            select(Room).options(selectinload(Room.room_type)).where(Room.id == stay.room_id)
+        )
+        room = result.scalar_one_or_none()
+        if not room or not room.room_type:
+            raise HTTPException(status_code=404, detail={"code": "ROOM_TYPE_NOT_FOUND", "message": "Room type not found for this stay"})
+        rt = room.room_type
 
         # Sum services from folio
         services_total = Decimal("0")
@@ -179,8 +179,9 @@ class StayService:
 
         now = datetime.now(timezone.utc)
 
+        stay_type_str = stay.stay_type.value if hasattr(stay.stay_type, "value") else str(stay.stay_type)
         pricing_input = PricingInput(
-            stay_type=stay.stay_type.value,
+            stay_type=stay_type_str,
             actual_check_in=stay.actual_check_in,
             expected_checkout=stay.expected_checkout,
             actual_checkout=now,
@@ -244,8 +245,9 @@ class StayService:
         if folio and folio.items:
             services_total = sum(item.total for item in folio.items if item.category != "ROOM")
 
+        stay_type_str = stay.stay_type.value if hasattr(stay.stay_type, "value") else str(stay.stay_type)
         pricing_input = PricingInput(
-            stay_type=stay.stay_type.value,
+            stay_type=stay_type_str,
             actual_check_in=stay.actual_check_in,
             expected_checkout=stay.expected_checkout,
             actual_checkout=now,
@@ -342,6 +344,7 @@ class StayService:
             db, "stay.checkout", "stay", str(stay_id), org_id, user_id,
             new_values={"grand_total": float(pricing.grand_total), "actual_checkout": now.isoformat()}
         )
+        await db.flush()
 
         return {
             "stay_id": str(stay_id),

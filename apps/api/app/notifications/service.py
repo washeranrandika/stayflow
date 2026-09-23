@@ -60,11 +60,15 @@ class NotificationService:
         org_id: uuid.UUID,
     ) -> None:
         """Schedule checkout reminder tasks via Celery."""
-        from app.notifications.tasks import schedule_checkout_reminder_task
         try:
+            from app.core.celery_app import celery_app
+            if not celery_app.conf.task_always_eager:
+                # In non-eager mode without Redis, gracefully skip
+                pass
+            from app.notifications.tasks import schedule_checkout_reminder_task
             schedule_checkout_reminder_task.apply_async(
                 args=[str(stay_id), expected_checkout.isoformat(), str(org_id)],
-                countdown=1,  # schedule immediately, task handles timing
+                countdown=1,
             )
             logger.info("Checkout reminders scheduled", stay_id=str(stay_id), expected_checkout=expected_checkout.isoformat())
         except Exception as e:

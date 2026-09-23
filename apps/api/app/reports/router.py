@@ -20,13 +20,18 @@ router = APIRouter()
 
 @router.get("/revenue", response_model=dict)
 async def revenue_report(
-    from_date: date = Query(...),
-    to_date: date = Query(...),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
     property_id: Optional[uuid.UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.REPORT_VIEW)),
 ):
     """Daily revenue report with payment method breakdown."""
+    if not to_date:
+        to_date = date.today()
+    if not from_date:
+        from_date = to_date - timedelta(days=30)
+
     # Base query: finalized invoices in date range
     query = (
         select(func.sum(Invoice.grand_total), func.sum(Invoice.room_charge), func.sum(Invoice.services_total), func.count())
@@ -93,12 +98,17 @@ async def revenue_report(
 
 @router.get("/occupancy", response_model=dict)
 async def occupancy_report(
-    from_date: date = Query(...),
-    to_date: date = Query(...),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
     property_id: Optional[uuid.UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.REPORT_VIEW)),
 ):
+    if not to_date:
+        to_date = date.today()
+    if not from_date:
+        from_date = to_date - timedelta(days=30)
+
     query = (
         select(func.count(Stay.id))
         .join(Property, Stay.property_id == Property.id)
@@ -134,12 +144,17 @@ async def occupancy_report(
 
 @router.get("/payments", response_model=dict)
 async def payment_report(
-    from_date: date = Query(...),
-    to_date: date = Query(...),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
     property_id: Optional[uuid.UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.REPORT_VIEW)),
 ):
+    if not to_date:
+        to_date = date.today()
+    if not from_date:
+        from_date = to_date - timedelta(days=30)
+
     query = (
         select(func.sum(Payment.amount), func.count(Payment.id))
         .join(Invoice, Payment.invoice_id == Invoice.id)

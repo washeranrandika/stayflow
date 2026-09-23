@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
 
     # Security
-    SECRET_KEY: str = secrets.token_hex(64)
+    SECRET_KEY: str = "638510e7522c8f25ec35faeadf353490866ab3cc32315d24229686f63cf08928"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30

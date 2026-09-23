@@ -15,39 +15,37 @@ from app.core.models import (
     Organization, User, OrganizationMember, Property, RoomType, Room, Guest,
     UserRoleEnum, RoomStatusEnum,
 )
+from app.core.config import settings
 from app.core.security import hash_password
+from app.core.celery_app import celery_app
 
-# Use in-memory SQLite for tests or a test PostgreSQL
-TEST_DATABASE_URL = "postgresql+asyncpg://stayflow:stayflow_dev_password@localhost:5432/stayflow_test"
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# Eager mode for tests so Celery doesn't attempt Redis connection
+celery_app.conf.update(task_always_eager=True, task_eager_propagates=True)
 
 
 @pytest.fixture(scope="session")
-async def engine():
-    engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
+def engine():
+    return create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def setup_db(engine):
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    yield
     await engine.dispose()
 
 
 @pytest.fixture
 async def db(engine) -> AsyncGenerator[AsyncSession, None]:
-    """Fresh DB session per test with rollback."""
+    """Fresh DB session per test."""
     async_session = async_sessionmaker(engine, expire_on_commit=False)
     async with async_session() as session:
-        async with session.begin():
+        try:
             yield session
+        finally:
             await session.rollback()
+            await session.close()
 
 
 @pytest.fixture

@@ -123,6 +123,27 @@ async def add_folio_item(
     return success(data={"item_id": str(item.id), "total": float(item.total)}, message="Item added to folio")
 
 
+@router.get("/invoices", response_model=dict)
+async def list_invoices(
+    property_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.INVOICE_VIEW)),
+):
+    query = (
+        select(Invoice)
+        .join(Stay, Invoice.stay_id == Stay.id)
+        .join(Property, Stay.property_id == Property.id)
+        .options(selectinload(Invoice.payments))
+        .where(Property.organization_id == current_user.organization_id)
+    )
+    if property_id:
+        query = query.where(Stay.property_id == property_id)
+
+    result = await db.execute(query.order_by(Invoice.created_at.desc()))
+    invoices = result.scalars().all()
+    return success(data=[_serialize_invoice(inv) for inv in invoices])
+
+
 @router.get("/invoices/{invoice_id}", response_model=dict)
 async def get_invoice(
     invoice_id: uuid.UUID,

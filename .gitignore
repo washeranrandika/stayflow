@@ -36,6 +36,7 @@ web-build/
 # Build outputs
 dist/
 build/
+*.tsbuildinfo
 
 # Environment files — NEVER commit these
 .env

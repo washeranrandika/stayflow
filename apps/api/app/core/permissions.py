@@ -145,9 +145,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permission.HOUSEKEEPING_VIEW,
         Permission.SERVICE_VIEW,
         Permission.SERVICE_CREATE,
-        Permission.PRICING_VIEW,
     ],
-
     "HOUSEKEEPER": [
         Permission.ROOM_VIEW,
         Permission.ROOM_STATUS_UPDATE,
@@ -155,3 +153,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permission.HOUSEKEEPING_UPDATE,
     ],
 }
+
+
+def has_permission(role: str, permission: Permission | str) -> bool:
+    """Check if a role has a given permission."""
+    role_key = role.value if hasattr(role, "value") else str(role)
+    perm_val = permission.value if hasattr(permission, "value") else str(permission)
+    return perm_val in ROLE_PERMISSIONS.get(role_key, [])

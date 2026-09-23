@@ -4,12 +4,15 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from datetime import datetime
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, CurrentUser
 from app.core.permissions import Permission
+from app.core.models import Stay, Property, Folio
 from app.core.responses import success
 from app.stays.service import stay_service
 
@@ -41,14 +44,48 @@ def _serialize_stay(s):
         "room": {"id": str(s.room.id), "room_number": s.room.room_number} if s.room else None,
         "primary_guest_id": str(s.primary_guest_id),
         "primary_guest": {"id": str(s.primary_guest.id), "full_name": s.primary_guest.full_name} if s.primary_guest else None,
-        "stay_type": s.stay_type.value,
+        "stay_type": s.stay_type.value if hasattr(s.stay_type, "value") else str(s.stay_type),
         "actual_check_in": s.actual_check_in.isoformat(),
         "expected_checkout": s.expected_checkout.isoformat(),
         "actual_checkout": s.actual_checkout.isoformat() if s.actual_checkout else None,
         "num_guests": s.num_guests,
         "is_completed": s.is_completed,
+        "folio_id": str(s.folio.id) if s.folio else None,
+        "folio": {
+            "id": str(s.folio.id),
+            "total": float(sum(item.total for item in s.folio.items)) if s.folio and s.folio.items else 0,
+        } if s.folio else None,
         "created_at": s.created_at.isoformat(),
     }
+
+
+@router.get("/active", response_model=dict)
+async def list_active_stays(
+    property_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.STAY_VIEW)),
+):
+    from sqlalchemy.orm import selectinload
+    from app.core.models import Property, Folio
+    query = (
+        select(Stay)
+        .join(Property, Stay.property_id == Property.id)
+        .options(
+            selectinload(Stay.room),
+            selectinload(Stay.primary_guest),
+            selectinload(Stay.folio).selectinload(Folio.items),
+        )
+        .where(
+            Property.organization_id == current_user.organization_id,
+            Stay.is_completed == False,
+        )
+    )
+    if property_id:
+        query = query.where(Stay.property_id == property_id)
+
+    result = await db.execute(query.order_by(Stay.actual_check_in.desc()))
+    stays = result.scalars().all()
+    return success(data=[_serialize_stay(s) for s in stays])
 
 
 @router.post("/check-in", response_model=dict)

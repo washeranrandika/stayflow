@@ -43,6 +43,27 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      {/* Operations */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Operations</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/checkout")}>
+            <LogOut size={20} color="#2563eb" />
+            <Text style={styles.cardText}>Active Stays & Checkout</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/housekeeping")}>
+            <Building2 size={20} color="#16a34a" />
+            <Text style={styles.cardText}>Housekeeping & Cleaning</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/reports")}>
+            <FileText size={20} color="#9333ea" />
+            <Text style={styles.cardText}>Manager Reports & KPIs</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Organization Info */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Organization</Text>

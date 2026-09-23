@@ -17,6 +17,7 @@ const navGroups = [
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       { href: "/rooms", icon: BedDouble, label: "Rooms" },
+      { href: "/room-types", icon: ClipboardList, label: "Room Types" },
       { href: "/bookings", icon: Calendar, label: "Bookings" },
       { href: "/guests", icon: Users, label: "Guests" },
       { href: "/stays", icon: Sparkles, label: "Active Stays" },
@@ -35,9 +36,11 @@ const navGroups = [
     items: [
       { href: "/properties", icon: Building2, label: "Properties" },
       { href: "/reports", icon: BarChart3, label: "Reports" },
-      { href: "/staff", icon: Shield, label: "Staff & Roles" },
+      { href: "/staff", icon: Users, label: "Staff" },
+      { href: "/roles", icon: Shield, label: "Roles & RBAC" },
       { href: "/audit-logs", icon: FileText, label: "Audit Logs" },
       { href: "/settings", icon: Settings, label: "Settings" },
+      { href: "/subscription", icon: Sparkles, label: "Subscription" },
     ],
   },
 ];
