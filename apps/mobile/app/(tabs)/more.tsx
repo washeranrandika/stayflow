@@ -1,11 +1,16 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from "react-native";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "expo-router";
-import { Building2, LogOut, FileText, User, Settings as SettingsIcon } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Building2, LogOut, FileText, User, Settings as SettingsIcon,
+  ChevronRight, ShieldCheck, Sparkles, Sliders
+} from "lucide-react-native";
 
 export default function MoreScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -18,7 +23,7 @@ export default function MoreScreen() {
     }
     Alert.alert(
       "Sign Out",
-      "Are you sure you want to sign out?",
+      "Are you sure you want to sign out of StayFlow?",
       [
         { text: "Cancel", style: "cancel" },
         { 
@@ -34,81 +39,112 @@ export default function MoreScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
-      <View style={styles.profileSection}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <TouchableOpacity
+        style={[styles.profileSection]}
+        onPress={() => router.push("/profile" as any)}
+        activeOpacity={0.7}
+      >
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{user?.full_name?.charAt(0) || "U"}</Text>
+          <Text style={styles.avatarText}>{(user?.full_name || "U").slice(0, 2).toUpperCase()}</Text>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.name}>{user?.full_name || "User"}</Text>
-          <Text style={styles.email}>{user?.email || "user@stayflow.demo"}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={styles.name}>{user?.full_name || "Staff Member"}</Text>
+            <View style={styles.verifiedTag}>
+              <ShieldCheck size={11} color="#15803d" />
+            </View>
+          </View>
+          <Text style={styles.email}>{user?.email || "user@stayflow.com"}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>{user?.role || "STAFF"}</Text>
           </View>
         </View>
-      </View>
+        <ChevronRight size={20} color="#94a3b8" />
+      </TouchableOpacity>
 
       {/* Operations */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Operations</Text>
         <View style={styles.card}>
           <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/checkout")}>
-            <LogOut size={20} color="#2563eb" />
+            <View style={[styles.iconBox, { backgroundColor: "#eff6ff" }]}>
+              <LogOut size={18} color="#2563eb" />
+            </View>
             <Text style={styles.cardText}>Active Stays & Checkout</Text>
+            <ChevronRight size={16} color="#cbd5e1" style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
           <View style={styles.divider} />
           <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/housekeeping")}>
-            <Building2 size={20} color="#16a34a" />
+            <View style={[styles.iconBox, { backgroundColor: "#f0fdf4" }]}>
+              <Building2 size={18} color="#16a34a" />
+            </View>
             <Text style={styles.cardText}>Housekeeping & Cleaning</Text>
+            <ChevronRight size={16} color="#cbd5e1" style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
           <View style={styles.divider} />
           <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/reports")}>
-            <FileText size={20} color="#9333ea" />
+            <View style={[styles.iconBox, { backgroundColor: "#faf5ff" }]}>
+              <FileText size={18} color="#9333ea" />
+            </View>
             <Text style={styles.cardText}>Manager Reports & KPIs</Text>
+            <ChevronRight size={16} color="#cbd5e1" style={{ marginLeft: "auto" }} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Settings / Links */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account & App</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/profile" as any)}>
+            <View style={[styles.iconBox, { backgroundColor: "#eff6ff" }]}>
+              <User size={18} color="#2563eb" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardText}>Profile Settings</Text>
+              <Text style={styles.cardSubText}>Name, phone, password & preferences</Text>
+            </View>
+            <ChevronRight size={16} color="#cbd5e1" />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.cardRow} onPress={() => router.push("/profile" as any)}>
+            <View style={[styles.iconBox, { backgroundColor: "#f8fafc" }]}>
+              <Sliders size={18} color="#475569" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardText}>App Preferences</Text>
+              <Text style={styles.cardSubText}>Live sync, alerts & security</Text>
+            </View>
+            <ChevronRight size={16} color="#cbd5e1" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Organization Info */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Organization</Text>
+        <Text style={styles.sectionTitle}>Hotel Property</Text>
         <View style={styles.card}>
           <View style={styles.cardRow}>
-            <Building2 size={20} color="#64748b" />
-            <Text style={styles.cardText}>{user?.organization_name || "StayFlow Demo"}</Text>
+            <View style={[styles.iconBox, { backgroundColor: "#f1f5f9" }]}>
+              <Building2 size={18} color="#64748b" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardText}>{user?.organization_name || "StayFlow Property Cloud"}</Text>
+              <Text style={styles.cardSubText}>Multi-Tenant Organization</Text>
+            </View>
           </View>
-        </View>
-      </View>
-
-      {/* Settings / Links */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>App</Text>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.cardRow}>
-            <User size={20} color="#64748b" />
-            <Text style={styles.cardText}>Profile Settings</Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity style={styles.cardRow}>
-            <FileText size={20} color="#64748b" />
-            <Text style={styles.cardText}>Terms & Privacy</Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity style={styles.cardRow}>
-            <SettingsIcon size={20} color="#64748b" />
-            <Text style={styles.cardText}>App Preferences</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
       {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <LogOut size={20} color="#ef4444" />
+        <LogOut size={18} color="#ef4444" />
         <Text style={styles.logoutText}>Sign Out</Text>
       </TouchableOpacity>
       
-      <Text style={styles.version}>Version 1.0.0</Text>
+      <Text style={styles.version}>StayFlow PMS • Version 1.0.0</Text>
+      <View style={{ height: 30 }} />
     </ScrollView>
   );
 }
@@ -141,13 +177,28 @@ const styles = StyleSheet.create({
   cardRow: {
     flexDirection: "row", alignItems: "center", padding: 16, gap: 12,
   },
-  cardText: { fontSize: 16, color: "#0f172a", fontWeight: "500" },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginLeft: 48 },
+  cardText: { fontSize: 15, color: "#0f172a", fontWeight: "700" },
+  cardSubText: { fontSize: 11, color: "#64748b", marginTop: 2 },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verifiedTag: {
+    backgroundColor: "#f0fdf4",
+    padding: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+  divider: { height: 1, backgroundColor: "#f1f5f9", marginLeft: 64 },
   logoutBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     margin: 20, padding: 16, backgroundColor: "#fef2f2",
     borderRadius: 12, borderWidth: 1, borderColor: "#fecaca", gap: 8,
   },
-  logoutText: { fontSize: 16, fontWeight: "700", color: "#ef4444" },
-  version: { textAlign: "center", color: "#94a3b8", fontSize: 13, marginBottom: 40 },
+  logoutText: { fontSize: 15, fontWeight: "800", color: "#ef4444" },
+  version: { textAlign: "center", color: "#94a3b8", fontSize: 12, fontWeight: "600" },
 });

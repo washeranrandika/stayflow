@@ -25,6 +25,7 @@ export default function RootLayout() {
         <Stack.Screen name="housekeeping" options={{ presentation: "modal", headerTitle: "Housekeeping", headerShown: true }} />
         <Stack.Screen name="reports" options={{ presentation: "modal", headerTitle: "Reports", headerShown: true }} />
         <Stack.Screen name="new-guest" options={{ headerShown: false, animation: "slide_from_bottom" }} />
+        <Stack.Screen name="profile" options={{ headerShown: false, animation: "slide_from_right" }} />
       </Stack>
     </QueryClientProvider>
   );

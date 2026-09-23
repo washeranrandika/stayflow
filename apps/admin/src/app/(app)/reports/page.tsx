@@ -34,7 +34,7 @@ export default function ReportsPage() {
   const properties = propsData?.data?.data || [];
   const revenueStats = revData?.data?.data || {};
   const occupancyStats = occData?.data?.data || {};
-  const paymentStats = payData?.data?.data || [];
+  const paymentStats = payData?.data?.data?.breakdown || (Array.isArray(payData?.data?.data) ? payData.data.data : []);
 
   return (
     <div className="space-y-6">

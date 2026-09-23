@@ -78,13 +78,17 @@ export default function DashboardScreen() {
         </View>
 
         {/* User avatar / badge */}
-        <View style={styles.userBadge}>
+        <TouchableOpacity
+          style={styles.userBadge}
+          onPress={() => router.push("/profile" as any)}
+          activeOpacity={0.75}
+        >
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>
               {(user?.full_name || "U").slice(0, 2).toUpperCase()}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* ── Scrollable Dashboard Content ─────────────────────────────────── */}
