@@ -22,12 +22,20 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+import { Building2 } from "lucide-react";
+
 export default function BookingsPage() {
+  const { propertyIdParam, selectedProperty, properties, setProperty, selectedPropertyId } = useActiveProperty();
   const [filter, setFilter] = useState<string | null>(null);
 
   const { data: bookingsData, isLoading } = useQuery({
-    queryKey: ["bookings", filter],
-    queryFn: () => bookingsApi.list(filter ? { status: filter } : {}),
+    queryKey: ["bookings", filter, propertyIdParam],
+    queryFn: () =>
+      bookingsApi.list({
+        ...(filter ? { status: filter } : {}),
+        ...(propertyIdParam ? { property_id: propertyIdParam } : {}),
+      }),
   });
 
   const bookings = bookingsData?.data?.data || [];
@@ -54,12 +62,32 @@ export default function BookingsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage reservations and active stays</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Bookings {selectedProperty ? `— ${selectedProperty.name}` : ""}
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">Manage reservations and active stays across your properties</p>
         </div>
-        <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-          + New Booking
-        </button>
+        <div className="flex items-center gap-3">
+          {properties.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs text-slate-500 font-medium">Property:</span>
+              <select
+                value={selectedPropertyId}
+                onChange={(e) => setProperty(e.target.value)}
+                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
+              >
+                <option value="all">All Properties</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+            + New Booking
+          </button>
+        </div>
       </div>
 
       {/* Filters & Search */}

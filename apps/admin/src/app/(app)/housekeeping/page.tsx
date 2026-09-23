@@ -5,13 +5,21 @@ import { housekeepingApi } from "@/lib/api";
 import { ClipboardList, CheckCircle2, Clock, PlayCircle, AlertCircle } from "lucide-react";
 import clsx from "clsx";
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+import { Building2 } from "lucide-react";
+
 export default function HousekeepingPage() {
   const queryClient = useQueryClient();
+  const { propertyIdParam, selectedProperty, properties, setProperty, selectedPropertyId } = useActiveProperty();
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["housekeepingTasks", filterStatus],
-    queryFn: () => housekeepingApi.listTasks(filterStatus !== "ALL" ? { status: filterStatus } : {}),
+    queryKey: ["housekeepingTasks", filterStatus, propertyIdParam],
+    queryFn: () =>
+      housekeepingApi.listTasks({
+        ...(filterStatus !== "ALL" ? { status: filterStatus } : {}),
+        ...(propertyIdParam ? { property_id: propertyIdParam } : {}),
+      }),
     refetchInterval: 30_000,
   });
 
@@ -31,26 +39,46 @@ export default function HousekeepingPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Housekeeping & Room Turnaround</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Housekeeping & Room Turnaround {selectedProperty ? `— ${selectedProperty.name}` : ""}
+          </h1>
           <p className="text-sm text-slate-500">
             Dispatch cleaning tasks, track turnover status, and mark cleaned rooms available.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"].map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={clsx(
-                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-                filterStatus === st
-                  ? "bg-blue-600 text-white"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-              )}
-            >
-              {st.replace("_", " ")}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          {properties.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs text-slate-500 font-medium">Property:</span>
+              <select
+                value={selectedPropertyId}
+                onChange={(e) => setProperty(e.target.value)}
+                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
+              >
+                <option value="all">All Properties</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"].map((st) => (
+              <button
+                key={st}
+                onClick={() => setFilterStatus(st)}
+                className={clsx(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                  filterStatus === st
+                    ? "bg-blue-600 text-white"
+                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                )}
+              >
+                {st.replace("_", " ")}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

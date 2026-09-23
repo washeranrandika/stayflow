@@ -6,8 +6,12 @@ import { staysApi, billingApi, paymentsApi } from "@/lib/api";
 import { Sparkles, BedDouble, Plus, LogOut, Clock, DollarSign, CheckCircle } from "lucide-react";
 import Link from "next/link";
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+import { Building2 } from "lucide-react";
+
 export default function StaysPage() {
   const queryClient = useQueryClient();
+  const { propertyIdParam, selectedProperty, properties, setProperty, selectedPropertyId } = useActiveProperty();
 
   // Modals
   const [selectedStay, setSelectedStay] = useState<any | null>(null);
@@ -25,8 +29,8 @@ export default function StaysPage() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["activeStays"],
-    queryFn: () => apiClient.get("/stays/active"),
+    queryKey: ["activeStays", propertyIdParam],
+    queryFn: () => apiClient.get("/stays/active", { params: propertyIdParam ? { property_id: propertyIdParam } : {} }),
   });
 
   const { data: pricingData, isLoading: pricingLoading } = useQuery({
@@ -82,20 +86,40 @@ export default function StaysPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Active Stays & Folios</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Active Stays & Folios {selectedProperty ? `— ${selectedProperty.name}` : ""}
+          </h1>
           <p className="text-sm text-slate-500">
             Monitor ongoing guest stays, bill room service, and process final checkouts.
           </p>
         </div>
-        <Link
-          href="/check-in"
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Check-in</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          {properties.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs text-slate-500 font-medium">Property:</span>
+              <select
+                value={selectedPropertyId}
+                onChange={(e) => setProperty(e.target.value)}
+                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
+              >
+                <option value="all">All Properties</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <Link
+            href={`/check-in${propertyIdParam ? `?property_id=${propertyIdParam}` : ""}`}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Check-in</span>
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (

@@ -9,6 +9,15 @@ export const authApi = {
   me: () => apiClient.get("/users/me"),
 };
 
+// Users & Profile
+export const usersApi = {
+  me: () => apiClient.get("/users/me"),
+  updateProfile: (data: { full_name?: string; phone?: string }) =>
+    apiClient.patch("/users/me", data),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    apiClient.post("/users/me/change-password", data),
+};
+
 // Properties
 export const propertiesApi = {
   list: () => apiClient.get("/properties"),

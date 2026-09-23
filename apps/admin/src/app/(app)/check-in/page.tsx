@@ -1,13 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { staysApi, roomsApi, guestsApi, propertiesApi } from "@/lib/api";
-import { useRouter } from "next/navigation";
-import { BedDouble, UserPlus, Clock, ArrowRight } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { BedDouble, UserPlus, Clock, ArrowRight, Building2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function CheckInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [propertyId, setPropertyId] = useState<string>("");
   const [step, setStep] = useState(1);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [selectedGuest, setSelectedGuest] = useState<any>(null);
@@ -18,7 +20,46 @@ export default function CheckInPage() {
   const [expectedCheckout, setExpectedCheckout] = useState("");
 
   const { data: propsData } = useQuery({ queryKey: ["properties"], queryFn: () => propertiesApi.list() });
-  const propertyId = propsData?.data?.data?.[0]?.id;
+  const properties = propsData?.data?.data || [];
+
+  useEffect(() => {
+    const urlPropId = searchParams.get("property_id");
+    if (urlPropId) {
+      setPropertyId(urlPropId);
+      localStorage.setItem("sf_selected_property", urlPropId);
+      return;
+    }
+
+    if (properties.length > 0 && !propertyId) {
+      const saved = localStorage.getItem("sf_selected_property");
+      if (saved && saved !== "all" && properties.some((p: any) => p.id === saved)) {
+        setPropertyId(saved);
+      } else {
+        setPropertyId(properties[0].id);
+      }
+    }
+  }, [searchParams, properties, propertyId]);
+
+  useEffect(() => {
+    const handlePropChanged = (e: any) => {
+      const newId = e.detail;
+      if (newId && newId !== "all") {
+        setPropertyId(newId);
+      } else if (newId === "all" && properties.length > 0) {
+        setPropertyId(properties[0].id);
+      }
+    };
+    window.addEventListener("property-changed", handlePropChanged);
+    return () => window.removeEventListener("property-changed", handlePropChanged);
+  }, [properties]);
+
+  const handlePropertyChange = (newPropId: string) => {
+    setPropertyId(newPropId);
+    setSelectedRoom(null);
+    localStorage.setItem("sf_selected_property", newPropId);
+    window.dispatchEvent(new CustomEvent("property-changed", { detail: newPropId }));
+    router.replace(`/check-in?property_id=${newPropId}`);
+  };
 
   const { data: roomsData } = useQuery({
     queryKey: ["rooms", propertyId, "AVAILABLE"],
@@ -60,9 +101,26 @@ export default function CheckInPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">New Check-in</h1>
-        <p className="text-slate-500 text-sm mt-1">Walk-in guest registration</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">New Check-in</h1>
+          <p className="text-slate-500 text-sm mt-1">Walk-in guest registration</p>
+        </div>
+        {properties.length > 0 && (
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+            <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Property:</span>
+            <select
+              value={propertyId}
+              onChange={(e) => handlePropertyChange(e.target.value)}
+              className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
+            >
+              {properties.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Stepper */}

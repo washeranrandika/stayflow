@@ -21,6 +21,14 @@ export function Header({ userName, userRole }: { userName: string; userRole?: st
     if (saved) {
       setSelectedPropertyId(saved);
     }
+
+    const handler = (e: any) => {
+      if (e.detail) {
+        setSelectedPropertyId(e.detail);
+      }
+    };
+    window.addEventListener("property-changed", handler);
+    return () => window.removeEventListener("property-changed", handler);
   }, []);
 
   const handleSelectProperty = (id: string) => {

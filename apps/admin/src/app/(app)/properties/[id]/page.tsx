@@ -135,7 +135,7 @@ export default function PropertyDetailPage() {
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-900">Rooms at {property.name}</h2>
           <Link
-            href="/rooms"
+            href={`/rooms?property_id=${id}`}
             className="text-sm font-semibold text-blue-600 hover:text-blue-700"
           >
             Manage in Room Grid →

@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { propertiesApi, roomsApi, roomTypesApi } from "@/lib/api";
-import { Users, AirVent, Loader2, BedDouble, Plus, X, CheckCircle, Sparkles } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Users, AirVent, Loader2, BedDouble, Plus, X, Building2, ChevronDown } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import clsx from "clsx";
 
@@ -26,9 +26,11 @@ function RoomStatusBadge({ status }: { status: string }) {
 
 export default function RoomsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [propertyId, setPropertyId] = useState<string>("");
 
   // Form State
   const [roomNumber, setRoomNumber] = useState("");
@@ -37,22 +39,62 @@ export default function RoomsPage() {
   const [maxGuests, setMaxGuests] = useState(2);
   const [notes, setNotes] = useState("");
 
-  // 1. Fetch properties (to get the active property ID)
+  // 1. Fetch properties
   const { data: propsData, isLoading: isLoadingProps } = useQuery({
     queryKey: ["properties"],
     queryFn: () => propertiesApi.list(),
   });
 
-  const propertyId = propsData?.data?.data?.[0]?.id;
+  const properties = propsData?.data?.data || [];
 
-  // 2. Fetch rooms for that property
+  // Sync selected property from URL query, localStorage, or first property
+  useEffect(() => {
+    const urlPropId = searchParams.get("property_id");
+    if (urlPropId) {
+      setPropertyId(urlPropId);
+      localStorage.setItem("sf_selected_property", urlPropId);
+      return;
+    }
+
+    if (properties.length > 0 && !propertyId) {
+      const saved = localStorage.getItem("sf_selected_property");
+      if (saved && saved !== "all" && properties.some((p: any) => p.id === saved)) {
+        setPropertyId(saved);
+      } else {
+        setPropertyId(properties[0].id);
+      }
+    }
+  }, [searchParams, properties, propertyId]);
+
+  // Listen to header property change events
+  useEffect(() => {
+    const handlePropChanged = (e: any) => {
+      const newId = e.detail;
+      if (newId && newId !== "all") {
+        setPropertyId(newId);
+      } else if (newId === "all" && properties.length > 0) {
+        setPropertyId(properties[0].id);
+      }
+    };
+    window.addEventListener("property-changed", handlePropChanged);
+    return () => window.removeEventListener("property-changed", handlePropChanged);
+  }, [properties]);
+
+  const handlePropertyChange = (newPropId: string) => {
+    setPropertyId(newPropId);
+    localStorage.setItem("sf_selected_property", newPropId);
+    window.dispatchEvent(new CustomEvent("property-changed", { detail: newPropId }));
+    router.replace(`/rooms?property_id=${newPropId}`);
+  };
+
+  // 2. Fetch rooms for active property
   const { data: roomsData, isLoading: isLoadingRooms } = useQuery({
     queryKey: ["rooms", propertyId],
     queryFn: () => roomsApi.listByProperty(propertyId as string),
     enabled: !!propertyId,
   });
 
-  // 3. Fetch room types for creation dropdown
+  // 3. Fetch room types for active property
   const { data: typesData } = useQuery({
     queryKey: ["roomTypes", propertyId],
     queryFn: () => roomTypesApi.listByProperty(propertyId as string),
@@ -62,11 +104,16 @@ export default function RoomsPage() {
   const roomTypes = typesData?.data?.data || [];
   const rooms = roomsData?.data?.data || [];
   const filteredRooms = filter ? rooms.filter((r: any) => r.status === filter) : rooms;
+  const currentProperty = properties.find((p: any) => p.id === propertyId);
 
-  // Set default room type when available
-  if (roomTypes.length > 0 && !roomTypeId) {
-    setRoomTypeId(roomTypes[0].id);
-  }
+  // Set default room type when available or changed
+  useEffect(() => {
+    if (roomTypes.length > 0) {
+      setRoomTypeId(roomTypes[0].id);
+    } else {
+      setRoomTypeId("");
+    }
+  }, [propertyId, typesData]);
 
   // Create Room Mutation
   const createMutation = useMutation({
@@ -122,7 +169,7 @@ export default function RoomsPage() {
     { label: "Maintenance", value: "MAINTENANCE" },
   ];
 
-  if (isLoadingProps || isLoadingRooms) {
+  if (isLoadingProps) {
     return (
       <div className="p-8 flex justify-center items-center h-[calc(100vh-64px)]">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -130,33 +177,62 @@ export default function RoomsPage() {
     );
   }
 
-  if (!propertyId) {
+  if (properties.length === 0) {
     return (
-      <div className="p-8 text-center">
-        <h2 className="text-xl font-semibold text-slate-800">No properties found</h2>
-        <p className="text-slate-500 mt-2">Please create a property first.</p>
+      <div className="p-12 text-center bg-white rounded-xl border border-slate-200 m-6">
+        <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+        <h2 className="text-lg font-bold text-slate-800">No properties found</h2>
+        <p className="text-slate-500 text-sm mt-1">Please create a property first.</p>
+        <button
+          onClick={() => router.push("/properties")}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
+        >
+          Go to Properties
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header & Property Selector */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Rooms</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage and monitor room status across your property</p>
+          <h1 className="text-2xl font-bold text-slate-900">Room Grid & Status</h1>
+          <p className="text-slate-500 text-sm mt-0.5">
+            Manage room inventory and housekeeping status for {currentProperty?.name || "your property"}
+          </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> Add Room
-        </button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Property Dropdown Selector */}
+          <div className="relative flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+            <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Property:</span>
+            <select
+              value={propertyId}
+              onChange={(e) => handlePropertyChange(e.target.value)}
+              className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
+            >
+              {properties.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.city ? `(${p.city})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Add Room
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-nowrap overflow-x-auto gap-2 pb-2 mb-6">
+      <div className="flex flex-nowrap overflow-x-auto gap-2 pb-1">
         {filters.map((f) => (
           <button
             key={f.label}
@@ -173,17 +249,41 @@ export default function RoomsPage() {
         ))}
       </div>
 
-      {/* Grid */}
-      {filteredRooms.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-xl border border-slate-200 border-dashed">
+      {/* Loading state for rooms */}
+      {isLoadingRooms ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-pulse">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-44 bg-white rounded-xl border border-slate-200" />
+          ))}
+        </div>
+      ) : filteredRooms.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-slate-200 border-dashed">
           <BedDouble className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">No rooms found matching this status.</p>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="mt-4 px-4 py-2 text-sm bg-blue-50 text-blue-600 font-semibold rounded-lg hover:bg-blue-100"
-          >
-            + Create your first room
-          </button>
+          <h3 className="text-base font-semibold text-slate-800">
+            {filter ? "No rooms match the selected filter" : `No rooms added yet for ${currentProperty?.name || "this property"}`}
+          </h3>
+          <p className="text-slate-500 text-xs mt-1">
+            {roomTypes.length === 0
+              ? "Create a room type first, then add rooms to this property."
+              : "Get started by adding your first room to this property."}
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            {roomTypes.length === 0 ? (
+              <button
+                onClick={() => router.push(`/room-types?property_id=${propertyId}`)}
+                className="px-4 py-2 text-sm bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+              >
+                + Create Room Type First
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="px-4 py-2 text-sm bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+              >
+                + Add Room to {currentProperty?.name || "Property"}
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -216,7 +316,7 @@ export default function RoomsPage() {
 
               {/* Action strip at bottom */}
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-400 font-medium">
+                <span className="text-xs text-slate-400 font-medium truncate max-w-[120px]">
                   {room.notes || "Ready for guests"}
                 </span>
                 <div className="flex gap-2">
@@ -230,7 +330,7 @@ export default function RoomsPage() {
                    )}
                    {room.status === "AVAILABLE" && (
                      <button
-                       onClick={() => router.push("/check-in")}
+                       onClick={() => router.push(`/check-in?property_id=${propertyId}`)}
                        className="text-xs px-3 py-1 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
                      >
                        Check-in
@@ -254,7 +354,9 @@ export default function RoomsPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Add New Room</h2>
-                  <p className="text-xs text-slate-500">Create a room under the active property</p>
+                  <p className="text-xs text-slate-500">
+                    Adding to <span className="font-semibold text-blue-600">{currentProperty?.name}</span>
+                  </p>
                 </div>
               </div>
               <button
@@ -266,6 +368,24 @@ export default function RoomsPage() {
             </div>
 
             <form onSubmit={handleCreate} className="mt-5 space-y-4">
+              {/* Property Indicator / Switcher in Modal */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Property
+                </label>
+                <select
+                  value={propertyId}
+                  onChange={(e) => handlePropertyChange(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {properties.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.city ? `(${p.city})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Room Number */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -288,7 +408,18 @@ export default function RoomsPage() {
                 </label>
                 {roomTypes.length === 0 ? (
                   <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                    No room types found. Please go to <a href="/room-types" className="underline font-bold">Room Types</a> first.
+                    No room types found for {currentProperty?.name}. Please create a{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsModalOpen(false);
+                        router.push(`/room-types?property_id=${propertyId}`);
+                      }}
+                      className="underline font-bold text-amber-900 hover:text-amber-950"
+                    >
+                      Room Type
+                    </button>{" "}
+                    first.
                   </div>
                 ) : (
                   <select

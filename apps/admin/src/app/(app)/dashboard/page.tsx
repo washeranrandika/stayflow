@@ -41,10 +41,14 @@ function RoomStatusBadge({ status }: { status: string }) {
   );
 }
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+
 export default function DashboardPage() {
+  const { propertyIdParam, selectedProperty, isAll } = useActiveProperty();
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => reportsApi.dashboard(),
+    queryKey: ["dashboard", propertyIdParam],
+    queryFn: () => reportsApi.dashboard(propertyIdParam),
     refetchInterval: 60_000, // refresh every minute
   });
 
@@ -67,9 +71,12 @@ export default function DashboardPage() {
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-900">
+          Dashboard {selectedProperty ? `— ${selectedProperty.name}` : ""}
+        </h1>
         <p className="text-slate-500 text-sm mt-1">
           {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {!isAll && selectedProperty?.city && ` • ${selectedProperty.city}`}
         </p>
       </div>
 

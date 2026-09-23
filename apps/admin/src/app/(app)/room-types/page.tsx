@@ -2,9 +2,12 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { roomTypesApi, propertiesApi } from "@/lib/api";
-import { Layers, Plus, DollarSign, Wind, Users, Check, Sparkles } from "lucide-react";
+import { Layers, Plus, DollarSign, Wind, Users, Check, Sparkles, Building2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function RoomTypesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [propertyId, setPropertyId] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,15 +31,42 @@ export default function RoomTypesPage() {
   const properties = propsData?.data?.data || [];
 
   useEffect(() => {
+    const urlPropId = searchParams.get("property_id");
+    if (urlPropId) {
+      setPropertyId(urlPropId);
+      localStorage.setItem("sf_selected_property", urlPropId);
+      return;
+    }
+
     if (properties.length > 0 && !propertyId) {
       const saved = localStorage.getItem("sf_selected_property");
-      if (saved && saved !== "all") {
+      if (saved && saved !== "all" && properties.some((p: any) => p.id === saved)) {
         setPropertyId(saved);
       } else {
         setPropertyId(properties[0].id);
       }
     }
-  }, [properties, propertyId]);
+  }, [searchParams, properties, propertyId]);
+
+  useEffect(() => {
+    const handlePropChanged = (e: any) => {
+      const newId = e.detail;
+      if (newId && newId !== "all") {
+        setPropertyId(newId);
+      } else if (newId === "all" && properties.length > 0) {
+        setPropertyId(properties[0].id);
+      }
+    };
+    window.addEventListener("property-changed", handlePropChanged);
+    return () => window.removeEventListener("property-changed", handlePropChanged);
+  }, [properties]);
+
+  const handlePropertyChange = (newPropId: string) => {
+    setPropertyId(newPropId);
+    localStorage.setItem("sf_selected_property", newPropId);
+    window.dispatchEvent(new CustomEvent("property-changed", { detail: newPropId }));
+    router.replace(`/room-types?property_id=${newPropId}`);
+  };
 
   const { data: typesData, isLoading } = useQuery({
     queryKey: ["roomTypes", propertyId],
@@ -82,16 +112,20 @@ export default function RoomTypesPage() {
           <p className="text-sm text-slate-500">Configure base rates for hourly, day-use, overnight and daily stays.</p>
         </div>
         <div className="flex items-center gap-3">
-          {properties.length > 1 && (
-            <select
-              value={propertyId}
-              onChange={(e) => setPropertyId(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {properties.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+          {properties.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs text-slate-500 font-medium">Property:</span>
+              <select
+                value={propertyId}
+                onChange={(e) => handlePropertyChange(e.target.value)}
+                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
+              >
+                {properties.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
           )}
           <button
             onClick={() => setIsModalOpen(true)}
