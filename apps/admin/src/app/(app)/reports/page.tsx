@@ -21,7 +21,7 @@ import {
 import { useActiveProperty } from "@/hooks/useActiveProperty";
 
 export default function ReportsPage() {
-  const { propertyIdParam, selectedPropertyId, setProperty, properties } = useActiveProperty();
+  const { propertyIdParam, selectedProperty } = useActiveProperty();
   const [reportType, setReportType] = useState<"overview" | "revenue" | "occupancy" | "payments">("overview");
   const [period, setPeriod] = useState<"TODAY" | "7D" | "30D" | "MONTH">("30D");
 
@@ -101,9 +101,11 @@ export default function ReportsPage() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Manager Analytics & Financials</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Manager Analytics & Financials {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
+          </h1>
           <p className="text-sm text-slate-500">
-            Real-time revenue performance, room inventory occupancy, ADR, RevPAR, and audit transactions.
+            Real-time revenue performance, room inventory occupancy, ADR, RevPAR, and audit transactions {selectedProperty ? `for ${selectedProperty.name}` : "across all properties"}.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -123,17 +125,6 @@ export default function ReportsPage() {
               </button>
             ))}
           </div>
-
-          <select
-            value={selectedPropertyId}
-            onChange={(e) => setProperty(e.target.value)}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-medium"
-          >
-            <option value="all">All Properties</option>
-            {properties.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
 
           <button
             onClick={handleRefresh}

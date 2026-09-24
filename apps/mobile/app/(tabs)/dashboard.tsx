@@ -50,7 +50,7 @@ export default function DashboardScreen() {
     enabled: !!user,
   });
 
-  const properties: any[] = propsData || [];
+  const properties: any[] = Array.isArray(propsData) ? propsData : [];
   const currentProperty = properties.find((p) => p.id === activePropertyId);
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({

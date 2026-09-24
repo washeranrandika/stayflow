@@ -6,45 +6,21 @@ import { usePathname } from "next/navigation";
 import { Building2, Plus, Bell, ChevronDown, Check, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+
 const ORG_LEVEL_ROUTES = ["/roles", "/subscription", "/audit-logs", "/settings", "/properties"];
 
 export function Header({ userName, userRole }: { userName: string; userRole?: string }) {
   const pathname = usePathname();
   const isOrgLevelPage = ORG_LEVEL_ROUTES.some((route) => pathname?.startsWith(route));
 
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
+  const { selectedPropertyId, selectedProperty, properties, setProperty } = useActiveProperty();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const { data: propsData } = useQuery({
-    queryKey: ["properties"],
-    queryFn: () => propertiesApi.list(),
-  });
-
-  const properties = propsData?.data?.data || [];
-
-  useEffect(() => {
-    const saved = localStorage.getItem("sf_selected_property");
-    if (saved) {
-      setSelectedPropertyId(saved);
-    }
-
-    const handler = (e: any) => {
-      if (e.detail) {
-        setSelectedPropertyId(e.detail);
-      }
-    };
-    window.addEventListener("property-changed", handler);
-    return () => window.removeEventListener("property-changed", handler);
-  }, []);
-
   const handleSelectProperty = (id: string) => {
-    setSelectedPropertyId(id);
-    localStorage.setItem("sf_selected_property", id);
+    setProperty(id);
     setIsDropdownOpen(false);
-    window.dispatchEvent(new CustomEvent("property-changed", { detail: id }));
   };
-
-  const selectedProperty = properties.find((p: any) => p.id === selectedPropertyId);
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-20">

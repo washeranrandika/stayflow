@@ -28,17 +28,18 @@ export function useActiveProperty() {
   const properties: PropertyOption[] = propsData?.data?.data || [];
   const user = userData?.data?.data;
   const userAssignedPropertyId = user?.assigned_property_id;
+  const isRestrictedRole = user?.role === "RECEPTIONIST" || user?.role === "HOUSEKEEPER";
 
   // 1. Initialize from URL params, user assigned property, or localStorage
   useEffect(() => {
-    // Priority 1: User's explicitly assigned property branch
-    if (userAssignedPropertyId) {
+    // If the user's role is strictly locked to a single property (e.g. receptionist/housekeeper)
+    if (isRestrictedRole && userAssignedPropertyId) {
       setSelectedPropertyId(userAssignedPropertyId);
       localStorage.setItem("sf_selected_property", userAssignedPropertyId);
       return;
     }
 
-    // Priority 2: URL Query parameter
+    // Priority 1: URL Query parameter
     const urlProp = searchParams?.get("property_id");
     if (urlProp) {
       setSelectedPropertyId(urlProp);
@@ -46,14 +47,20 @@ export function useActiveProperty() {
       return;
     }
 
-    // Priority 3: Local storage or all
+    // Priority 2: Local storage
     const saved = localStorage.getItem("sf_selected_property");
     if (saved) {
       setSelectedPropertyId(saved);
+      return;
+    }
+
+    // Priority 3: Default fallback
+    if (userAssignedPropertyId) {
+      setSelectedPropertyId(userAssignedPropertyId);
     } else {
       setSelectedPropertyId("all");
     }
-  }, [searchParams, userAssignedPropertyId]);
+  }, [searchParams, userAssignedPropertyId, isRestrictedRole]);
 
   // 2. Listen to custom 'property-changed' events dispatched across components
   useEffect(() => {

@@ -105,6 +105,7 @@ class ReservationService:
             .options(
                 selectinload(Reservation.room),
                 selectinload(Reservation.primary_guest),
+                selectinload(Reservation.property),
             )
             .where(Property.organization_id == org_id)
         )

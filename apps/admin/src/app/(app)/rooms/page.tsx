@@ -24,13 +24,14 @@ function RoomStatusBadge({ status }: { status: string }) {
   );
 }
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+
 export default function RoomsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [propertyId, setPropertyId] = useState<string>("");
 
   // Form State
   const [roomNumber, setRoomNumber] = useState("");
@@ -39,72 +40,35 @@ export default function RoomsPage() {
   const [maxGuests, setMaxGuests] = useState(2);
   const [notes, setNotes] = useState("");
 
-  // 1. Fetch properties
-  const { data: propsData, isLoading: isLoadingProps } = useQuery({
-    queryKey: ["properties"],
-    queryFn: () => propertiesApi.list(),
-  });
+  const { selectedProperty, selectedPropertyId, isAll, propertyIdParam, properties, isLoadingProperties } = useActiveProperty();
+  const [modalPropertyId, setModalPropertyId] = useState<string>("");
 
-  const properties = propsData?.data?.data || [];
-
-  // Sync selected property from URL query, localStorage, or first property
   useEffect(() => {
-    const urlPropId = searchParams.get("property_id");
-    if (urlPropId) {
-      setPropertyId(urlPropId);
-      localStorage.setItem("sf_selected_property", urlPropId);
-      return;
+    if (selectedPropertyId !== "all") {
+      setModalPropertyId(selectedPropertyId);
+    } else if (properties.length > 0 && !modalPropertyId) {
+      setModalPropertyId(properties[0].id);
     }
+  }, [selectedPropertyId, properties, modalPropertyId]);
 
-    if (properties.length > 0 && !propertyId) {
-      const saved = localStorage.getItem("sf_selected_property");
-      if (saved && saved !== "all" && properties.some((p: any) => p.id === saved)) {
-        setPropertyId(saved);
-      } else {
-        setPropertyId(properties[0].id);
-      }
-    }
-  }, [searchParams, properties, propertyId]);
+  const targetModalPropId = modalPropertyId || properties[0]?.id || "";
 
-  // Listen to header property change events
-  useEffect(() => {
-    const handlePropChanged = (e: any) => {
-      const newId = e.detail;
-      if (newId && newId !== "all") {
-        setPropertyId(newId);
-      } else if (newId === "all" && properties.length > 0) {
-        setPropertyId(properties[0].id);
-      }
-    };
-    window.addEventListener("property-changed", handlePropChanged);
-    return () => window.removeEventListener("property-changed", handlePropChanged);
-  }, [properties]);
-
-  const handlePropertyChange = (newPropId: string) => {
-    setPropertyId(newPropId);
-    localStorage.setItem("sf_selected_property", newPropId);
-    window.dispatchEvent(new CustomEvent("property-changed", { detail: newPropId }));
-    router.replace(`/rooms?property_id=${newPropId}`);
-  };
-
-  // 2. Fetch rooms for active property
+  // 2. Fetch rooms (all or filtered by property)
   const { data: roomsData, isLoading: isLoadingRooms } = useQuery({
-    queryKey: ["rooms", propertyId],
-    queryFn: () => roomsApi.listByProperty(propertyId as string),
-    enabled: !!propertyId,
+    queryKey: ["rooms", propertyIdParam],
+    queryFn: () => roomsApi.list(propertyIdParam ? { property_id: propertyIdParam } : {}),
   });
 
-  // 3. Fetch room types for active property
+  // 3. Fetch room types for modal
   const { data: typesData } = useQuery({
-    queryKey: ["roomTypes", propertyId],
-    queryFn: () => roomTypesApi.listByProperty(propertyId as string),
-    enabled: !!propertyId,
+    queryKey: ["roomTypes", targetModalPropId],
+    queryFn: () => roomTypesApi.list(targetModalPropId ? { property_id: targetModalPropId } : {}),
+    enabled: !!targetModalPropId,
   });
 
   const roomTypes = typesData?.data?.data || [];
   const rooms = roomsData?.data?.data || [];
   const filteredRooms = filter ? rooms.filter((r: any) => r.status === filter) : rooms;
-  const currentProperty = properties.find((p: any) => p.id === propertyId);
 
   // Set default room type when available or changed
   useEffect(() => {
@@ -113,14 +77,14 @@ export default function RoomsPage() {
     } else {
       setRoomTypeId("");
     }
-  }, [propertyId, typesData]);
+  }, [targetModalPropId, typesData]);
 
   // Create Room Mutation
   const createMutation = useMutation({
     mutationFn: (body: any) => roomsApi.create(body),
     onSuccess: () => {
       toast.success("Room created successfully!");
-      queryClient.invalidateQueries({ queryKey: ["rooms", propertyId] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
       setIsModalOpen(false);
       setRoomNumber("");
       setNotes("");
@@ -136,7 +100,7 @@ export default function RoomsPage() {
       roomsApi.updateStatus(id, status),
     onSuccess: () => {
       toast.success("Room status updated");
-      queryClient.invalidateQueries({ queryKey: ["rooms", propertyId] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.detail?.message || "Failed to update room");
@@ -145,13 +109,13 @@ export default function RoomsPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roomNumber.trim() || !roomTypeId || !propertyId) {
-      toast.error("Please fill in the room number and select a room type.");
+    if (!roomNumber.trim() || !roomTypeId || !targetModalPropId) {
+      toast.error("Please fill in the room number, select property, and select a room type.");
       return;
     }
 
     createMutation.mutate({
-      property_id: propertyId,
+      property_id: targetModalPropId,
       room_type_id: roomTypeId,
       room_number: roomNumber.trim(),
       floor: floor.trim() || null,
@@ -169,7 +133,7 @@ export default function RoomsPage() {
     { label: "Maintenance", value: "MAINTENANCE" },
   ];
 
-  if (isLoadingProps) {
+  if (isLoadingProperties) {
     return (
       <div className="p-8 flex justify-center items-center h-[calc(100vh-64px)]">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -195,33 +159,18 @@ export default function RoomsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header & Property Selector */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Room Grid & Status</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Room Grid & Status {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
+          </h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            Manage room inventory and housekeeping status for {currentProperty?.name || "your property"}
+            Manage room inventory and housekeeping status {selectedProperty ? `for ${selectedProperty.name}` : "across all properties"}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Property Dropdown Selector */}
-          <div className="relative flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-            <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-            <span className="text-xs text-slate-500 font-medium">Property:</span>
-            <select
-              value={propertyId}
-              onChange={(e) => handlePropertyChange(e.target.value)}
-              className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
-            >
-              {properties.map((p: any) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.city ? `(${p.city})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setIsModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
@@ -260,17 +209,17 @@ export default function RoomsPage() {
         <div className="text-center py-16 bg-white rounded-xl border border-slate-200 border-dashed">
           <BedDouble className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-800">
-            {filter ? "No rooms match the selected filter" : `No rooms added yet for ${currentProperty?.name || "this property"}`}
+            {filter ? "No rooms match the selected filter" : `No rooms added yet ${selectedProperty ? `for ${selectedProperty.name}` : ""}`}
           </h3>
           <p className="text-slate-500 text-xs mt-1">
             {roomTypes.length === 0
               ? "Create a room type first, then add rooms to this property."
-              : "Get started by adding your first room to this property."}
+              : "Get started by adding your first room."}
           </p>
           <div className="mt-4 flex items-center justify-center gap-2">
             {roomTypes.length === 0 ? (
               <button
-                onClick={() => router.push(`/room-types?property_id=${propertyId}`)}
+                onClick={() => router.push(`/room-types${targetModalPropId ? `?property_id=${targetModalPropId}` : ""}`)}
                 className="px-4 py-2 text-sm bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
               >
                 + Create Room Type First
@@ -280,7 +229,7 @@ export default function RoomsPage() {
                 onClick={() => setIsModalOpen(true)}
                 className="px-4 py-2 text-sm bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
               >
-                + Add Room to {currentProperty?.name || "Property"}
+                + Add Room
               </button>
             )}
           </div>
@@ -290,6 +239,12 @@ export default function RoomsPage() {
           {filteredRooms.map((room: any) => (
             <div key={room.id} className="bg-white rounded-xl border border-slate-200 p-5 card-hover flex flex-col justify-between">
               <div>
+                {(!selectedProperty || isAll) && room.property_name && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md mb-2.5 w-fit">
+                    <Building2 className="w-3 h-3 text-slate-500" />
+                    <span>{room.property_name}</span>
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-xl font-bold text-slate-900">Room {room.room_number}</h3>
@@ -330,7 +285,7 @@ export default function RoomsPage() {
                    )}
                    {room.status === "AVAILABLE" && (
                      <button
-                       onClick={() => router.push(`/check-in?property_id=${propertyId}`)}
+                       onClick={() => router.push(`/check-in?property_id=${room.property_id}`)}
                        className="text-xs px-3 py-1 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
                      >
                        Check-in
@@ -355,7 +310,7 @@ export default function RoomsPage() {
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Add New Room</h2>
                   <p className="text-xs text-slate-500">
-                    Adding to <span className="font-semibold text-blue-600">{currentProperty?.name}</span>
+                    Adding to <span className="font-semibold text-blue-600">{properties.find((p: any) => p.id === targetModalPropId)?.name || "Property"}</span>
                   </p>
                 </div>
               </div>
@@ -371,11 +326,11 @@ export default function RoomsPage() {
               {/* Property Indicator / Switcher in Modal */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Property
+                  Property *
                 </label>
                 <select
-                  value={propertyId}
-                  onChange={(e) => handlePropertyChange(e.target.value)}
+                  value={targetModalPropId}
+                  onChange={(e) => setModalPropertyId(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   {properties.map((p: any) => (
@@ -408,12 +363,12 @@ export default function RoomsPage() {
                 </label>
                 {roomTypes.length === 0 ? (
                   <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                    No room types found for {currentProperty?.name}. Please create a{" "}
+                    No room types found for {properties.find((p: any) => p.id === targetModalPropId)?.name || "this property"}. Please create a{" "}
                     <button
                       type="button"
                       onClick={() => {
                         setIsModalOpen(false);
-                        router.push(`/room-types?property_id=${propertyId}`);
+                        router.push(`/room-types?property_id=${targetModalPropId}`);
                       }}
                       className="underline font-bold text-amber-900 hover:text-amber-950"
                     >

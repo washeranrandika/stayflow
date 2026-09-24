@@ -41,6 +41,7 @@ def _serialize(r):
         "id": str(r.id),
         "reservation_number": r.reservation_number,
         "property_id": str(r.property_id),
+        "property_name": r.property.name if getattr(r, "property", None) else None,
         "room_id": str(r.room_id),
         "room": {"id": str(r.room.id), "room_number": r.room.room_number, "status": r.room.status.value} if r.room else None,
         "primary_guest_id": str(r.primary_guest_id),

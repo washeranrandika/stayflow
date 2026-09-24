@@ -10,7 +10,7 @@ import { Building2 } from "lucide-react";
 
 export default function PaymentsPage() {
   const queryClient = useQueryClient();
-  const { propertyIdParam, selectedProperty, properties, setProperty, selectedPropertyId } = useActiveProperty();
+  const { propertyIdParam, selectedProperty } = useActiveProperty();
   const [refundPayment, setRefundPayment] = useState<any | null>(null);
   const [refundAmount, setRefundAmount] = useState<number>(0);
   const [refundReason, setRefundReason] = useState("");
@@ -47,28 +47,12 @@ export default function PaymentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Payment Transactions {selectedProperty ? `— ${selectedProperty.name}` : ""}
+            Payment Transactions {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
           </h1>
           <p className="text-sm text-slate-500">
-            Complete ledger of received payments, settlement methods, and customer refunds.
+            Complete ledger of received payments, settlement methods, and customer refunds {selectedProperty ? `for ${selectedProperty.name}` : "across all properties"}.
           </p>
         </div>
-        {properties.length > 0 && (
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-            <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-            <span className="text-xs text-slate-500 font-medium">Property:</span>
-            <select
-              value={selectedPropertyId}
-              onChange={(e) => setProperty(e.target.value)}
-              className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
-            >
-              <option value="all">All Properties</option>
-              {properties.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">

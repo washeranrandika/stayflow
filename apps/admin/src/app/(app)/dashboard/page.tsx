@@ -72,7 +72,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">
-          Dashboard {selectedProperty ? `— ${selectedProperty.name}` : ""}
+          Dashboard {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
         </h1>
         <p className="text-slate-500 text-sm mt-1">
           {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}

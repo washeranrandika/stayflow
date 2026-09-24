@@ -176,9 +176,9 @@ class OrganizationMember(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship(back_populates="members")
-    user: Mapped["User"] = relationship(back_populates="memberships")
-    property: Mapped[Optional["Property"]] = relationship(foreign_keys=[property_id])
+    organization: Mapped["Organization"] = relationship(back_populates="members", lazy="joined")
+    user: Mapped["User"] = relationship(back_populates="memberships", lazy="joined")
+    property: Mapped[Optional["Property"]] = relationship(foreign_keys=[property_id], lazy="joined")
 
     __table_args__ = (
         UniqueConstraint("organization_id", "user_id", name="uq_org_member"),
@@ -551,6 +551,7 @@ class Stay(Base, UUIDMixin, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
     # Relationships
+    property: Mapped["Property"] = relationship()
     reservation: Mapped[Optional["Reservation"]] = relationship(back_populates="stay")
     room: Mapped["Room"] = relationship(back_populates="stays")
     primary_guest: Mapped["Guest"] = relationship(back_populates="stays")

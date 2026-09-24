@@ -28,6 +28,30 @@ class RoomService:
             raise TenantViolationError()
         return prop
 
+    async def get_rooms(
+        self,
+        db: AsyncSession,
+        org_id: uuid.UUID,
+        property_id: Optional[uuid.UUID] = None,
+        status_filter: Optional[str] = None,
+    ) -> List[Room]:
+        query = (
+            select(Room)
+            .options(
+                selectinload(Room.room_type),
+                selectinload(Room.property),
+            )
+            .join(Property, Room.property_id == Property.id)
+            .where(Property.organization_id == org_id, Room.is_active == True)
+        )
+        if property_id:
+            query = query.where(Room.property_id == property_id)
+        if status_filter:
+            query = query.where(Room.status == status_filter)
+
+        result = await db.execute(query.order_by(Room.room_number))
+        return result.scalars().all()
+
     async def get_rooms_for_property(
         self,
         db: AsyncSession,
@@ -40,7 +64,10 @@ class RoomService:
 
         query = (
             select(Room)
-            .options(selectinload(Room.room_type))
+            .options(
+                selectinload(Room.room_type),
+                selectinload(Room.property),
+            )
             .where(Room.property_id == property_id, Room.is_active == True)
         )
         if status_filter:

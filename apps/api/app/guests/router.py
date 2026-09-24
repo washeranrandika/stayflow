@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.dependencies import require_permission, CurrentUser
 from app.core.permissions import Permission
-from app.core.models import Guest, Reservation, Stay
+from app.core.models import Guest, Reservation, Stay, UserRoleEnum
 from app.core.responses import success, paginated
 from app.core.exceptions import TenantViolationError
 from app.audit.service import audit_log
@@ -60,10 +60,23 @@ async def list_guests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Search by name, phone, or email"),
+    property_id: Optional[uuid.UUID] = Query(None, description="Filter guests by property"),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.GUEST_VIEW)),
 ):
     query = select(Guest).where(Guest.organization_id == current_user.organization_id)
+
+    effective_property_id = property_id
+    if not effective_property_id and current_user.role in [UserRoleEnum.RECEPTIONIST, UserRoleEnum.HOUSEKEEPER]:
+        effective_property_id = current_user.property_id
+
+    if effective_property_id:
+        query = query.where(
+            or_(
+                Guest.reservations.any(Reservation.property_id == effective_property_id),
+                Guest.stays.any(Stay.property_id == effective_property_id),
+            )
+        )
 
     if search:
         q = f"%{search}%"

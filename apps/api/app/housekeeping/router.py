@@ -28,6 +28,7 @@ def _serialize(t):
     return {
         "id": str(t.id),
         "property_id": str(t.property_id),
+        "property_name": t.property.name if getattr(t, "property", None) else None,
         "room_id": str(t.room_id),
         "room": {"room_number": t.room.room_number, "status": t.room.status.value} if t.room else None,
         "assigned_to": str(t.assigned_to) if t.assigned_to else None,
@@ -52,7 +53,10 @@ async def list_tasks(
     query = (
         select(HousekeepingTask)
         .join(Property, HousekeepingTask.property_id == Property.id)
-        .options(selectinload(HousekeepingTask.room))
+        .options(
+            selectinload(HousekeepingTask.room),
+            selectinload(HousekeepingTask.property),
+        )
         .where(Property.organization_id == current_user.organization_id)
     )
 

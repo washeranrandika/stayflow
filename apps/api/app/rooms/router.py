@@ -41,6 +41,7 @@ def _serialize(r):
     return {
         "id": str(r.id),
         "property_id": str(r.property_id),
+        "property_name": r.property.name if getattr(r, "property", None) else None,
         "room_type_id": str(r.room_type_id),
         "room_type": {
             "id": str(rt.id),
@@ -59,6 +60,17 @@ def _serialize(r):
         "created_at": r.created_at.isoformat(),
         "updated_at": r.updated_at.isoformat(),
     }
+
+
+@router.get("", response_model=dict)
+async def list_rooms(
+    property_id: Optional[uuid.UUID] = Query(None),
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.ROOM_VIEW)),
+):
+    rooms = await room_service.get_rooms(db, current_user.organization_id, property_id, status)
+    return success(data=[_serialize(r) for r in rooms])
 
 
 @router.get("/by-property/{property_id}", response_model=dict)

@@ -3,15 +3,14 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { staysApi, billingApi, paymentsApi } from "@/lib/api";
-import { Sparkles, BedDouble, Plus, LogOut, Clock, DollarSign, CheckCircle } from "lucide-react";
+import { Sparkles, BedDouble, Plus, LogOut, Clock, DollarSign, CheckCircle, Building2, Search } from "lucide-react";
 import Link from "next/link";
 
 import { useActiveProperty } from "@/hooks/useActiveProperty";
-import { Building2 } from "lucide-react";
 
 export default function StaysPage() {
   const queryClient = useQueryClient();
-  const { propertyIdParam, selectedProperty, properties, setProperty, selectedPropertyId } = useActiveProperty();
+  const { propertyIdParam, selectedProperty } = useActiveProperty();
 
   // Modals
   const [selectedStay, setSelectedStay] = useState<any | null>(null);
@@ -27,6 +26,7 @@ export default function StaysPage() {
   // Checkout pricing & payment state
   const [checkoutDiscount, setCheckoutDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["activeStays", propertyIdParam],
@@ -39,7 +39,17 @@ export default function StaysPage() {
     enabled: !!selectedStay && checkoutModalOpen,
   });
 
-  const activeStays = data?.data?.data || [];
+  const allStays: any[] = data?.data?.data || [];
+  const activeStays = allStays.filter((stay: any) => {
+    if (!search.trim()) return true;
+    const term = search.toLowerCase();
+    return (
+      stay.room?.room_number?.toLowerCase().includes(term) ||
+      stay.primary_guest?.full_name?.toLowerCase().includes(term) ||
+      stay.primary_guest?.phone?.toLowerCase().includes(term) ||
+      stay.property_name?.toLowerCase().includes(term)
+    );
+  });
   const pricing = pricingData?.data?.data;
 
   // Mutations
@@ -89,32 +99,26 @@ export default function StaysPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Active Stays & Folios {selectedProperty ? `— ${selectedProperty.name}` : ""}
+            Active Stays & Folios {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
           </h1>
           <p className="text-sm text-slate-500">
-            Monitor ongoing guest stays, bill room service, and process final checkouts.
+            Monitor ongoing guest stays, bill room service, and process final checkouts {selectedProperty ? `at ${selectedProperty.name}` : "across all properties"}.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {properties.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-xs text-slate-500 font-medium">Property:</span>
-              <select
-                value={selectedPropertyId}
-                onChange={(e) => setProperty(e.target.value)}
-                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
-              >
-                <option value="all">All Properties</option>
-                {properties.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by room, guest, or branch..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full sm:w-64 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
           <Link
             href={`/check-in${propertyIdParam ? `?property_id=${propertyIdParam}` : ""}`}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>New Check-in</span>
@@ -138,6 +142,12 @@ export default function StaysPage() {
               className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-between"
             >
               <div>
+                {!selectedProperty && stay.property_name && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md mb-2.5 w-fit">
+                    <Building2 className="w-3 h-3 text-slate-500" />
+                    <span>{stay.property_name}</span>
+                  </div>
+                )}
                 <div className="flex items-start justify-between">
                   <span className="px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-sm">
                     Room {stay.room?.room_number || "—"}

@@ -4,6 +4,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from decimal import Decimal
 
@@ -49,6 +50,7 @@ def _serialize(rt):
     return {
         "id": str(rt.id),
         "property_id": str(rt.property_id),
+        "property_name": rt.property.name if getattr(rt, "property", None) else None,
         "name": rt.name,
         "description": rt.description,
         "is_ac": rt.is_ac,
@@ -70,6 +72,24 @@ async def _verify_property_org(db, property_id, org_id):
         raise TenantViolationError()
 
 
+@router.get("", response_model=dict)
+async def list_all_room_types(
+    property_id: Optional[uuid.UUID] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_permission(Permission.ROOM_TYPE_VIEW)),
+):
+    query = (
+        select(RoomType)
+        .options(selectinload(RoomType.property))
+        .join(Property, RoomType.property_id == Property.id)
+        .where(Property.organization_id == current_user.organization_id)
+    )
+    if property_id:
+        query = query.where(RoomType.property_id == property_id)
+    result = await db.execute(query.order_by(RoomType.name))
+    return success(data=[_serialize(rt) for rt in result.scalars().all()])
+
+
 @router.get("/by-property/{property_id}", response_model=dict)
 async def list_room_types(
     property_id: uuid.UUID,
@@ -77,7 +97,12 @@ async def list_room_types(
     current_user: CurrentUser = Depends(require_permission(Permission.ROOM_TYPE_VIEW)),
 ):
     await _verify_property_org(db, property_id, current_user.organization_id)
-    result = await db.execute(select(RoomType).where(RoomType.property_id == property_id).order_by(RoomType.name))
+    result = await db.execute(
+        select(RoomType)
+        .options(selectinload(RoomType.property))
+        .where(RoomType.property_id == property_id)
+        .order_by(RoomType.name)
+    )
     return success(data=[_serialize(rt) for rt in result.scalars().all()])
 
 

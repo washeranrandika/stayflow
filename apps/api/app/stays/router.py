@@ -62,6 +62,7 @@ def _serialize_stay(s):
         "id": str(s.id),
         "reservation_id": str(s.reservation_id) if s.reservation_id else None,
         "property_id": str(s.property_id),
+        "property_name": s.property.name if getattr(s, "property", None) else None,
         "room_id": str(s.room_id),
         "room": {"id": str(s.room.id), "room_number": s.room.room_number, "max_guests": getattr(s.room, "max_guests", 2)} if s.room else None,
         "primary_guest_id": str(s.primary_guest_id),
@@ -100,6 +101,7 @@ async def list_active_stays(
         select(Stay)
         .join(Property, Stay.property_id == Property.id)
         .options(
+            selectinload(Stay.property),
             selectinload(Stay.room),
             selectinload(Stay.primary_guest),
             selectinload(Stay.folio).selectinload(Folio.items),

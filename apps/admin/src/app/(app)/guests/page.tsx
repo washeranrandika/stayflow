@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { guestsApi } from "@/lib/api";
 import { validateGuestId, DecodedIdInfo } from "@/lib/idValidation";
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+import Link from "next/link";
 import {
   Loader2,
   Search,
@@ -19,6 +21,7 @@ import {
   AlertCircle,
   ShieldCheck,
   User,
+  Building2,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -62,9 +65,14 @@ export default function GuestsPage() {
     setIdValidation(result);
   }, [idType, idNumber]);
 
+  const { propertyIdParam, selectedProperty } = useActiveProperty();
+
   const { data: guestsData, isLoading } = useQuery({
-    queryKey: ["guests", debouncedSearch],
-    queryFn: () => guestsApi.list(debouncedSearch ? { search: debouncedSearch } : {}),
+    queryKey: ["guests", debouncedSearch, propertyIdParam],
+    queryFn: () => guestsApi.list({
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      ...(propertyIdParam ? { property_id: propertyIdParam } : {}),
+    }),
   });
 
   const guests = guestsData?.data?.data || [];
@@ -129,21 +137,25 @@ export default function GuestsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Guest Profiles & KYC</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Guest Profiles & KYC {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
+          </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Search guest history, manage profiles, and verify identity documents.
+            Search guest history, manage profiles, and verify identity documents {selectedProperty ? `for ${selectedProperty.name}` : "across all properties"}.
           </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowAddModal(true);
-          }}
-          className="px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Register New Guest</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              resetForm();
+              setShowAddModal(true);
+            }}
+            className="px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register New Guest</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters & Search */}
@@ -244,9 +256,12 @@ export default function GuestsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="text-blue-600 font-medium hover:text-blue-700 text-sm">
+                        <Link
+                          href={`/guests/${guest.id}`}
+                          className="text-blue-600 font-medium hover:text-blue-700 text-sm hover:underline"
+                        >
                           View Details
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))

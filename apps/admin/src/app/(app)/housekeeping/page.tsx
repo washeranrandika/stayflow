@@ -6,11 +6,10 @@ import { ClipboardList, CheckCircle2, Clock, PlayCircle, AlertCircle } from "luc
 import clsx from "clsx";
 
 import { useActiveProperty } from "@/hooks/useActiveProperty";
-import { Building2 } from "lucide-react";
 
 export default function HousekeepingPage() {
   const queryClient = useQueryClient();
-  const { propertyIdParam, selectedProperty, properties, setProperty, selectedPropertyId } = useActiveProperty();
+  const { propertyIdParam, selectedProperty } = useActiveProperty();
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
   const { data, isLoading } = useQuery({
@@ -40,29 +39,13 @@ export default function HousekeepingPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Housekeeping & Room Turnaround {selectedProperty ? `— ${selectedProperty.name}` : ""}
+            Housekeeping & Room Turnaround {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
           </h1>
           <p className="text-sm text-slate-500">
-            Dispatch cleaning tasks, track turnover status, and mark cleaned rooms available.
+            Dispatch cleaning tasks, track turnover status, and mark cleaned rooms available {selectedProperty ? `at ${selectedProperty.name}` : "across all properties"}.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {properties.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-xs text-slate-500 font-medium">Property:</span>
-              <select
-                value={selectedPropertyId}
-                onChange={(e) => setProperty(e.target.value)}
-                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
-              >
-                <option value="all">All Properties</option>
-                {properties.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="flex items-center gap-2">
             {["ALL", "PENDING", "IN_PROGRESS", "COMPLETED"].map((st) => (
               <button
@@ -88,6 +71,7 @@ export default function HousekeepingPage() {
             <thead className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3">Room</th>
+                {!selectedProperty && <th className="px-4 py-3">Property</th>}
                 <th className="px-4 py-3">Priority</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Dispatched At</th>
@@ -98,11 +82,11 @@ export default function HousekeepingPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">Loading housekeeping tasks...</td>
+                  <td colSpan={!selectedProperty ? 7 : 6} className="px-4 py-8 text-center text-slate-400">Loading housekeeping tasks...</td>
                 </tr>
               ) : tasks.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={!selectedProperty ? 7 : 6} className="px-4 py-8 text-center text-slate-400">
                     No cleaning tasks found for selected filter.
                   </td>
                 </tr>
@@ -112,6 +96,11 @@ export default function HousekeepingPage() {
                     <td className="px-4 py-3 font-bold text-slate-900">
                       Room {task.room?.room_number || "—"}
                     </td>
+                    {!selectedProperty && (
+                      <td className="px-4 py-3 font-medium text-slate-700">
+                        {task.property_name || "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <span className={clsx(
                         "px-2 py-0.5 rounded-full text-xs font-semibold",

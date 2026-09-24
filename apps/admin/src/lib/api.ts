@@ -28,6 +28,8 @@ export const propertiesApi = {
 
 // Rooms
 export const roomsApi = {
+  list: (params?: { property_id?: string; status?: string }) =>
+    apiClient.get("/rooms", { params }),
   listByProperty: (propertyId: string, status?: string) =>
     apiClient.get(`/rooms/by-property/${propertyId}`, { params: { status } }),
   get: (id: string) => apiClient.get(`/rooms/${id}`),
@@ -38,6 +40,8 @@ export const roomsApi = {
 
 // Room Types
 export const roomTypesApi = {
+  list: (params?: { property_id?: string }) =>
+    apiClient.get("/room-types", { params }),
   listByProperty: (propertyId: string) =>
     apiClient.get(`/room-types/by-property/${propertyId}`),
   get: (id: string) => apiClient.get(`/room-types/${id}`),

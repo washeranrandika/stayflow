@@ -5,11 +5,12 @@ import { roomTypesApi, propertiesApi } from "@/lib/api";
 import { Layers, Plus, DollarSign, Wind, Users, Check, Sparkles, Building2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { useActiveProperty } from "@/hooks/useActiveProperty";
+
 export default function RoomTypesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [propertyId, setPropertyId] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Form State
@@ -23,55 +24,22 @@ export default function RoomTypesPage() {
   const [dailyRate, setDailyRate] = useState(5000);
   const [extraHourRate, setExtraHourRate] = useState(500);
 
-  const { data: propsData } = useQuery({
-    queryKey: ["properties"],
-    queryFn: () => propertiesApi.list(),
-  });
-
-  const properties = propsData?.data?.data || [];
+  const { selectedProperty, selectedPropertyId, isAll, propertyIdParam, properties } = useActiveProperty();
+  const [modalPropertyId, setModalPropertyId] = useState<string>("");
 
   useEffect(() => {
-    const urlPropId = searchParams.get("property_id");
-    if (urlPropId) {
-      setPropertyId(urlPropId);
-      localStorage.setItem("sf_selected_property", urlPropId);
-      return;
+    if (selectedPropertyId !== "all") {
+      setModalPropertyId(selectedPropertyId);
+    } else if (properties.length > 0 && !modalPropertyId) {
+      setModalPropertyId(properties[0].id);
     }
+  }, [selectedPropertyId, properties, modalPropertyId]);
 
-    if (properties.length > 0 && !propertyId) {
-      const saved = localStorage.getItem("sf_selected_property");
-      if (saved && saved !== "all" && properties.some((p: any) => p.id === saved)) {
-        setPropertyId(saved);
-      } else {
-        setPropertyId(properties[0].id);
-      }
-    }
-  }, [searchParams, properties, propertyId]);
-
-  useEffect(() => {
-    const handlePropChanged = (e: any) => {
-      const newId = e.detail;
-      if (newId && newId !== "all") {
-        setPropertyId(newId);
-      } else if (newId === "all" && properties.length > 0) {
-        setPropertyId(properties[0].id);
-      }
-    };
-    window.addEventListener("property-changed", handlePropChanged);
-    return () => window.removeEventListener("property-changed", handlePropChanged);
-  }, [properties]);
-
-  const handlePropertyChange = (newPropId: string) => {
-    setPropertyId(newPropId);
-    localStorage.setItem("sf_selected_property", newPropId);
-    window.dispatchEvent(new CustomEvent("property-changed", { detail: newPropId }));
-    router.replace(`/room-types?property_id=${newPropId}`);
-  };
+  const targetModalPropId = modalPropertyId || properties[0]?.id || "";
 
   const { data: typesData, isLoading } = useQuery({
-    queryKey: ["roomTypes", propertyId],
-    queryFn: () => roomTypesApi.listByProperty(propertyId),
-    enabled: !!propertyId,
+    queryKey: ["roomTypes", propertyIdParam],
+    queryFn: () => roomTypesApi.list(propertyIdParam ? { property_id: propertyIdParam } : {}),
   });
 
   const roomTypes = typesData?.data?.data || [];
@@ -79,7 +47,7 @@ export default function RoomTypesPage() {
   const createMutation = useMutation({
     mutationFn: (body: any) => roomTypesApi.create(body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["roomTypes", propertyId] });
+      queryClient.invalidateQueries({ queryKey: ["roomTypes"] });
       setIsModalOpen(false);
       setName("");
       setDescription("");
@@ -88,9 +56,9 @@ export default function RoomTypesPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !propertyId) return;
+    if (!name.trim() || !targetModalPropId) return;
     createMutation.mutate({
-      property_id: propertyId,
+      property_id: targetModalPropId,
       name,
       description,
       is_ac: isAc,
@@ -108,28 +76,15 @@ export default function RoomTypesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Room Types & Rates</h1>
-          <p className="text-sm text-slate-500">Configure base rates for hourly, day-use, overnight and daily stays.</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Room Types & Rates {selectedProperty ? `— ${selectedProperty.name}` : "— All Properties"}
+          </h1>
+          <p className="text-sm text-slate-500">Configure base rates for hourly, day-use, overnight and daily stays {selectedProperty ? `at ${selectedProperty.name}` : "across all properties"}.</p>
         </div>
         <div className="flex items-center gap-3">
-          {properties.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-              <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-xs text-slate-500 font-medium">Property:</span>
-              <select
-                value={propertyId}
-                onChange={(e) => handlePropertyChange(e.target.value)}
-                className="text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-2"
-              >
-                {properties.map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>Add Room Type</span>
@@ -147,7 +102,7 @@ export default function RoomTypesPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
           <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-900">No room types configured</h3>
-          <p className="text-sm text-slate-500 mt-1">Define standard rates for this property.</p>
+          <p className="text-sm text-slate-500 mt-1">Define standard rates for your rooms.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -157,6 +112,12 @@ export default function RoomTypesPage() {
               className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between"
             >
               <div>
+                {(!selectedProperty || isAll) && rt.property_name && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md mb-2.5 w-fit">
+                    <Building2 className="w-3 h-3 text-slate-500" />
+                    <span>{rt.property_name}</span>
+                  </div>
+                )}
                 <div className="flex items-start justify-between">
                   <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-1">
                     <Wind className="w-3 h-3" />
@@ -202,6 +163,20 @@ export default function RoomTypesPage() {
             <h2 className="text-lg font-bold text-slate-900 mb-1">Create Room Type</h2>
             <p className="text-sm text-slate-500 mb-4">Set up room specifications and multi-tier pricing models.</p>
             <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Property *</label>
+                <select
+                  value={targetModalPropId}
+                  onChange={(e) => setModalPropertyId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {properties.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.city ? `(${p.city})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Room Type Name *</label>
                 <input

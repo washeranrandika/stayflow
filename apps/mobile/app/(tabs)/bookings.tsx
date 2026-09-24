@@ -79,7 +79,7 @@ export default function BookingsScreen() {
     },
     enabled: !!user,
   });
-  const properties: any[] = propsData || [];
+  const properties: any[] = Array.isArray(propsData) ? propsData : [];
 
   // Query 1: Reservations
   const {
@@ -309,6 +309,48 @@ export default function BookingsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Property Switcher Chips */}
+      {!isAssignedToSingleProperty && properties.length > 1 && (
+        <View style={{ backgroundColor: "#ffffff", borderBottomWidth: 1, borderBottomColor: "#f1f5f9", paddingVertical: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}>
+            <TouchableOpacity
+              onPress={() => setSelectedPropertyId("all")}
+              style={[
+                styles.chip,
+                activePropertyId === "all" && styles.chipActive,
+                { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 },
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, activePropertyId === "all" && styles.chipTextActive]}>
+                🌐 All Properties ({combinedItems.length})
+              </Text>
+            </TouchableOpacity>
+
+            {properties.map((p: any) => {
+              const isSelected = activePropertyId === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  onPress={() => setSelectedPropertyId(p.id)}
+                  style={[
+                    styles.chip,
+                    isSelected && styles.chipActive,
+                    { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, flexDirection: "row", alignItems: "center" },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Building2 size={12} color={isSelected ? "#ffffff" : "#64748b"} style={{ marginRight: 4 }} />
+                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                    {p.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Filter chips category bar */}
       <View style={styles.filterBarContainer}>
         <ScrollView
@@ -347,8 +389,18 @@ export default function BookingsScreen() {
           data={combinedItems}
           keyExtractor={(item) => `${item.is_stay ? "stay" : "res"}-${item.id}`}
           renderItem={renderBooking}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefreshAll} />}
+          contentContainerStyle={[
+            styles.list,
+            combinedItems.length === 0 && { flexGrow: 1, justifyContent: "center" },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={onRefreshAll}
+              tintColor="#2563eb"
+              colors={["#2563eb"]}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
               <CalendarIcon size={36} color="#cbd5e1" />
@@ -560,25 +612,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     flexShrink: 0,
   },
   chipActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
   },
   chipText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: "#64748b",
   },
   chipTextActive: {
     color: "#ffffff",
+    fontWeight: "700",
   },
   list: { padding: 16, paddingBottom: 40, gap: 12 },
   card: {
@@ -590,8 +643,8 @@ const styles = StyleSheet.create({
   resNumber: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
   inHouseTag: { backgroundColor: "#eff6ff", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: "#bfdbfe" },
   inHouseTagText: { fontSize: 10, fontWeight: "700", color: "#1d4ed8" },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
-  badgeText: { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  badgeText: { fontSize: 9.5, fontWeight: "700", textTransform: "capitalize" },
   details: { gap: 6 },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   guestTitle: { fontSize: 15, fontWeight: "700", color: "#0f172a" },

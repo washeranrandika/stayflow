@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/store/auth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Users, AirVent, LogIn, LogOut, Brush, Info, X, Building2, MapPin, CheckCircle } from "lucide-react-native";
+import { Users, AirVent, LogIn, LogOut, Brush, Info, X, Building2, MapPin, CheckCircle, RefreshCw } from "lucide-react-native";
 
 const STATUS_MAP: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   AVAILABLE:      { bg: "#f0fdf4", border: "#bbf7d0", text: "#166534", dot: "#22c55e" },
@@ -40,7 +40,7 @@ export default function RoomsScreen() {
   const [loadingStay, setLoadingStay] = useState(false);
 
   // 1. Fetch organization properties
-  const { data: propsData } = useQuery({
+  const { data: propsData, refetch: refetchProps } = useQuery({
     queryKey: ["properties", user?.id],
     queryFn: async () => {
       const res = await api.get("/properties");
@@ -49,7 +49,7 @@ export default function RoomsScreen() {
     enabled: !!user,
   });
 
-  const properties: any[] = propsData || [];
+  const properties: any[] = Array.isArray(propsData) ? propsData : [];
   const assignedPropId = user?.assigned_property_id;
   const isAssignedToSingleProperty = !!assignedPropId;
 
@@ -58,39 +58,23 @@ export default function RoomsScreen() {
     ? assignedPropId
     : selectedPropertyId || "all";
 
-  // 2. Fetch rooms
+  // 2. Fetch rooms directly using org-level endpoint with optional property_id
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["rooms", user?.id, activePropertyId, properties],
+    queryKey: ["rooms", activePropertyId],
     queryFn: async () => {
-      if (properties.length === 0) return [];
-
+      const params: any = {};
       if (activePropertyId && activePropertyId !== "all") {
-        const res = await api.get(`/rooms/by-property/${activePropertyId}`);
-        const propName = properties.find((p) => p.id === activePropertyId)?.name || "Property";
-        return (res.data?.data || []).map((r: any) => ({ ...r, property_name: propName }));
+        params.property_id = activePropertyId;
       }
-
-      // Fetch all rooms across all properties
-      const allRooms: any[] = [];
-      await Promise.all(
-        properties.map(async (p: any) => {
-          try {
-            const res = await api.get(`/rooms/by-property/${p.id}`);
-            const rms = (res.data?.data || []).map((r: any) => ({
-              ...r,
-              property_name: p.name,
-              property_city: p.city,
-            }));
-            allRooms.push(...rms);
-          } catch {
-            /* ignore individual failure */
-          }
-        })
-      );
-      return allRooms;
+      const res = await api.get("/rooms", { params });
+      return res.data?.data || [];
     },
-    enabled: !!user && properties.length > 0,
+    enabled: !!user,
   });
+
+  const onRefreshAll = async () => {
+    await Promise.all([refetch(), refetchProps()]);
+  };
 
   const rooms: any[] = data || [];
   const filtered = statusFilter === "ALL" ? rooms : rooms.filter((r) => r.status === statusFilter);
@@ -176,7 +160,7 @@ export default function RoomsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 12 : 8) }]}>
+    <View style={[styles.container]}>
       {/* ── Fixed Header ────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <View>
@@ -278,20 +262,22 @@ export default function RoomsScreen() {
       </View>
 
       {/* ── Room Cards Grid ───────────────────────────────────────────────── */}
-      {isLoading ? (
+      {isLoading && !isRefetching ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#2563eb" />
           <Text style={styles.loadingText}>Loading room grid...</Text>
         </View>
-      ) : filtered.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🏨</Text>
-          <Text style={styles.emptyTitle}>No rooms found</Text>
+      ) : isError ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.emptyIcon}>⚠️</Text>
+          <Text style={styles.emptyTitle}>Unable to load rooms</Text>
           <Text style={styles.emptySubtitle}>
-            {statusFilter !== "ALL"
-              ? `No rooms currently in ${statusFilter.toLowerCase()} status.`
-              : "No rooms configured for this property yet."}
+            {(error as any)?.response?.data?.detail?.message || (error as any)?.message || "Failed to fetch room inventory."}
           </Text>
+          <TouchableOpacity onPress={onRefreshAll} style={styles.retryBtn} activeOpacity={0.8}>
+            <RefreshCw size={14} color="#2563eb" />
+            <Text style={styles.retryBtnText}>Tap to Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -299,9 +285,34 @@ export default function RoomsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderRoom}
           numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+          columnWrapperStyle={filtered.length > 0 ? styles.columnWrapper : undefined}
+          contentContainerStyle={[
+            styles.listContent,
+            filtered.length === 0 && { flexGrow: 1, justifyContent: "center" },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={onRefreshAll}
+              tintColor="#2563eb"
+              colors={["#2563eb"]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🏨</Text>
+              <Text style={styles.emptyTitle}>No rooms found</Text>
+              <Text style={styles.emptySubtitle}>
+                {statusFilter !== "ALL"
+                  ? `No rooms currently in ${statusFilter.toLowerCase()} status.`
+                  : "No rooms configured for this property yet. Pull down to refresh."}
+              </Text>
+              <TouchableOpacity onPress={onRefreshAll} style={styles.retryBtn} activeOpacity={0.8}>
+                <RefreshCw size={14} color="#2563eb" />
+                <Text style={styles.retryBtnText}>Tap to refresh</Text>
+              </TouchableOpacity>
+            </View>
+          }
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -430,7 +441,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -644,6 +655,29 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     marginTop: 4,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  retryBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2563eb",
   },
   modalOverlay: {
     flex: 1,
